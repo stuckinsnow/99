@@ -12,7 +12,7 @@ end
 --- @param opts _99.Request.Opts
 local function validate_opts(opts)
     assert(opts.model, "you must provide a model for hange requests to work")
-    assert(opts.context, "you must provide context")
+    assert(opts.tmp_file, "you must provide context")
     assert(opts.provider, "you must provide a model provider")
 end
 
@@ -61,7 +61,7 @@ function OpenCodeProvider:make_request(query, request, observer)
     end)
 
     local id = get_id()
-    Logger:debug("make_request", "tmp_file", request.config.context.tmp_file, "id", id)
+    Logger:debug("make_request", "tmp_file", request.config.tmp_file, "id", id)
     vim.system(
         { "opencode", "run", "-m", request.config.model, query },
         {
@@ -132,7 +132,7 @@ end
 
 --- @param request _99.Request
 function OpenCodeProvider._retrieve_response(request)
-    local tmp = request.config.context.tmp_file
+    local tmp = request.config.tmp_file
     local success, result = pcall(function()
         return vim.fn.readfile(tmp)
     end)
@@ -153,12 +153,12 @@ end
 
 --- @class _99.Request.Opts
 --- @field model string
---- @field context _99.Context
+--- @field tmp_file string
 --- @field provider _99.Provider?
 
 --- @class _99.Request.Config
 --- @field model string
---- @field context _99.Context
+--- @field tmp_file string
 --- @field provider _99.Provider
 
 --- @class _99.Request

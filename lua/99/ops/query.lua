@@ -9,4 +9,6 @@ local function query(_99, range)
     local request = Request
 end
 
+return query
+
 

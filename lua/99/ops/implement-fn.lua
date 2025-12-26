@@ -42,12 +42,11 @@ local function implement_fn(_99)
     end
 
     local range = Range:from_ts_node(fn_call, buffer)
-    local location = Location.from_ts_node(fn_call, range)
+    local location = Location.from_range(range)
     local context = Context.new(_99):finalize(_99, location)
     local request = Request.new({
-        on_complete = update_code,
         model = _99.model,
-        context = context,
+        tmp_file = context.tmp_file,
         provider = _99.provider_override,
     })
 

@@ -39,7 +39,7 @@ end
 ---@param observer _99.ProviderObserver?
 function TestProvider:make_request(query, request, observer)
     local id = get_id()
-    Logger:debug("make_request", "tmp_file", request.config.context.tmp_file, "id", id)
+    Logger:debug("make_request", "tmp_file", request.config.tmp_file, "id", id)
     self.request = {
         query = query,
         request = request,

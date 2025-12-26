@@ -50,8 +50,7 @@ local function fill_in_function(_99)
         return
     end
 
-    local location =
-        editor.Location.from_ts_node(func.function_node, func.function_range)
+    local location = editor.Location.from_range(func.function_range)
     local virt_line_count = _99.ai_stdout_rows
     if virt_line_count >= 0 then
         location.marks.function_location = Mark.mark_func_body(buffer, func)
@@ -61,7 +60,7 @@ local function fill_in_function(_99)
     local request = Request.new({
         provider = _99.provider_override,
         model = _99.model,
-        context = context,
+        tmp_file = context.tmp_file,
     })
 
     context:add_to_request(request)
@@ -96,7 +95,8 @@ local function fill_in_function(_99)
                     Window.display_error(
                         "Error encountered while processing fill_in_function\n"
                             .. (
-                                response or "No Error text provided.  Check logs"
+                                response
+                                or "No Error text provided.  Check logs"
                             )
                     )
                 end

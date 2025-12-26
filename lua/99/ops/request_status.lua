@@ -84,7 +84,7 @@ function RequestStatus:start()
     end
 
     self.running = true
-    update_spinner()
+    vim.defer_fn(update_spinner, self.update_time)
 end
 
 function RequestStatus:stop()

@@ -1,7 +1,6 @@
 local Logger = require("99.logger.logger")
 
 --- @class _99.LanguageOps
---- @field add_function_spacing fun(lines: number, location: _99.Location): number
 --- @field log_item fun(item_name: string): string
 --- @field names table<string, string>
 
@@ -48,10 +47,6 @@ function M.initialize(_99)
     M.languages = {}
     for _, lang in ipairs(_99.languages) do
         M.languages[lang] = require("99.language." .. lang)
-        assert(
-            type(M.languages[lang].add_function_spacing) == "function",
-            "add_function_spacing not provided by language"
-        )
     end
 end
 
