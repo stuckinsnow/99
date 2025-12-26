@@ -22,13 +22,14 @@ local prompt_settings = {
         )
     end,
 
-    ---@param location _99.Location
+    ---@param context _99.RequestContext
     ---@return string
-    get_file_location = function(location)
+    get_file_location = function(context)
+        assert(context.range, "get_file_location requires range specified")
         return string.format(
             "<Location><File>%s</File><Function>%s</Function></Location>",
-            location.full_path,
-            location.range:to_string()
+            context.full_path,
+            context.range:to_string()
         )
     end,
 

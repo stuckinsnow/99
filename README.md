@@ -1,3 +1,31 @@
+### TODO
+- Finish Context -> RequestContext refactor
+  * which should consider logger
+- Fill in function tests should be reshaped.
+ * there should be one test to validate basic behavior. no more programmatic tests
+ * there should be a range test for replacing text
+ * fill in function update code should be redone, its much simplier now
+- implement function
+ * Point should get a insert code at function? ... maybe?
+   * perhaps Mark should get that, could be nice.
+- if the function's definition in typescript is mutli-line
+ * will have to get more clever with how i do function start, either body if body is available or function def + 1 line
+
+```typescript
+function display_text(
+  game_state: GameState,
+  text: string,
+  x: number,
+  y: number,
+): void {
+  const ctx = game_state.canvas.getContext("2d");
+  assert(ctx, "cannot get game context");
+  ctx.fillStyle = "white";
+  ctx.fillText(text, x, y);
+}
+```
+
+Then the virtual text will be displayed one line below "function" instead of first line in body
 ## The AI Agent That Neovim Deserves
 This is an example repo where i want to test what i think the ideal AI workflow
 is for people who dont have "skill issues."  This is meant to streamline the requests to AI and limit them it restricted areas.  For more general requests, please just use opencode.  Dont use neovim.
@@ -60,30 +88,3 @@ features, which will be a much better jumping point then a bunch of requests tha
 ### The Great Twitch Discussion
 I will conduct a stream on Jan 30 at 11am The Lords Time (Montana Time/Mountain Time (same thing))
 we will do an extensive deep dive on 99 and what we think is good and bad.
-
-### TODO
-- Fill in function tests should be reshaped.
- * there should be one test to validate basic behavior. no more programmatic tests
- * there should be a range test for replacing text
- * fill in function update code should be redone, its much simplier now
-- implement function
- * Point should get a insert code at function? ... maybe?
-   * perhaps Mark should get that, could be nice.
-- if the function's definition in typescript is mutli-line
- * will have to get more clever with how i do function start, either body if body is available or function def + 1 line
-
-```typescript
-function display_text(
-  game_state: GameState,
-  text: string,
-  x: number,
-  y: number,
-): void {
-  const ctx = game_state.canvas.getContext("2d");
-  assert(ctx, "cannot get game context");
-  ctx.fillStyle = "white";
-  ctx.fillText(text, x, y);
-}
-```
-
-Then the virtual text will be displayed one line below "function" instead of first line in body
