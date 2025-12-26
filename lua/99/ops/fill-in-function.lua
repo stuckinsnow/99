@@ -3,21 +3,21 @@ local Point = geo.Point
 local Logger = require("99.logger.logger")
 local Request = require("99.request")
 local Mark = require("99.ops.marks")
-local Context = require("99.ops.context")
 local editor = require("99.editor")
 local RequestStatus = require("99.ops.request_status")
 local Window = require("99.window")
 
+--- @param context _99.RequestContext
 --- @param res string
---- @param location _99.Location
-local function update_file_with_changes(res, location)
-    local buffer = location.buffer
-    local mark = location.marks.function_location
+local function update_file_with_changes(context, res)
+    local buffer = context.buffer
+    local mark = context.marks.function_location
 
     assert(
         mark and buffer,
         "mark and buffer have to be set on the location object"
     )
+    assert(mark:is_valid(), "mark is no longer valid")
 
     local func_start = Point.from_mark(mark)
     local ts = editor.treesitter
@@ -37,10 +37,9 @@ local function update_file_with_changes(res, location)
     func:replace_text(lines)
 end
 
---- @param _99 _99.State
---- @param xid number
-local function fill_in_function(_99, xid)
-    local logger = Logger:set_area("fill_in_function"):set_id(xid)
+--- @param context _99.RequestContext
+local function fill_in_function(context)
+    local logger = context.logger:set_area("fill_in_function")
     local ts = editor.treesitter
     local buffer = vim.api.nvim_get_current_buf()
     local cursor = Point:from_cursor()
@@ -52,25 +51,17 @@ local function fill_in_function(_99, xid)
     end
 
     local location = editor.Location.from_range(func.function_range)
-    local virt_line_count = _99.ai_stdout_rows
+    local virt_line_count = context._99.ai_stdout_rows
     if virt_line_count >= 0 then
         location.marks.function_location = Mark.mark_func_body(buffer, func)
     end
 
-    local context = Context.new(_99):finalize(_99, location)
-    local request = Request.new({
-        xid = xid,
-        provider = _99.provider_override,
-        model = _99.model,
-        tmp_file = context.tmp_file,
-    })
-
-    context:add_to_request(request)
-    request:add_prompt_content(_99.prompts.prompts.fill_in_function)
+    local request = Request.new(context)
+    request:add_prompt_content(context._99.prompts.prompts.fill_in_function)
 
     local request_status = RequestStatus.new(
         250,
-        _99.ai_stdout_rows,
+        context._99.ai_stdout_rows,
         "Loading",
         location.marks.function_location
     )
@@ -81,9 +72,9 @@ local function fill_in_function(_99, xid)
         location:clear_marks()
         request:cancel()
         request_status:stop()
-        _99:remove_active_request(active_request)
+        context._99:remove_active_request(active_request)
     end
-    active_request = _99:add_active_request(clean_up)
+    active_request = context._99:add_active_request(clean_up)
 
     request:start({
         on_stdout = function(line)
@@ -92,7 +83,7 @@ local function fill_in_function(_99, xid)
         on_complete = function(status, response)
             request_status:stop()
             if status == "failed" then
-                if _99.display_errors then
+                if context._99.display_errors then
                     Window.display_error(
                         "Error encountered while processing fill_in_function\n"
                             .. (

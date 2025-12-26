@@ -3,9 +3,8 @@ local Level = require("99.logger.level")
 local ops = require("99.ops")
 local Languages = require("99.language")
 local Window = require("99.window")
-local geo = require("99.geo")
-local Range = geo.Range
 local get_id = require("99.id")
+local RequestContext = require("99.request-context")
 
 --- @alias _99.Cleanup fun(): nil
 
@@ -97,23 +96,26 @@ local _99 = {
     FATAL = Level.FATAL,
 }
 
-function _99.implement_fn()
+--- @param operation_name string
+--- @return _99.RequestContext
+local function get_context(operation_name)
     local trace_id = get_id()
-    Logger:debug("99 Request", "method", "implement_fn", "id", trace_id)
-    ops.implement_fn(_99_state, trace_id)
+    local context = RequestContext.from_current_buffer(_99_state, trace_id)
+    context.logger:debug("99 Request", "method", operation_name, "id", trace_id)
+    return context
+end
+
+function _99.implement_fn()
+    ops.implement_fn(get_context("implement_fn"))
 end
 
 function _99.fill_in_function()
-    local trace_id = get_id()
-    Logger:debug("99 Request", "method", "fill_in_function", "id", trace_id)
-    ops.fill_in_function(_99_state)
+    ops.fill_in_function(get_context("fill_in_function"))
 end
 
 function _99.visual()
-    local trace_id = get_id()
-    local range = Range.from_visual_selection()
-    Logger:debug("99 Request", "method", "visual", "id", trace_id)
-    ops.visual(_99_state, range)
+    local context = get_context("visual")
+    ops.visual(context)
 end
 
 --- View all the logs that are currently cached.  Cached log count is determined
