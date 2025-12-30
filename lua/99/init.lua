@@ -104,6 +104,10 @@ local _99 = {
     FATAL = Level.FATAL,
 }
 
+local function reselect()
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>gv", true, false, true), "x", false)
+end
+
 --- @param operation_name string
 --- @return _99.RequestContext
 local function get_context(operation_name)
@@ -118,6 +122,15 @@ function _99.fill_in_function()
 end
 
 function _99.visual()
+    --- TODO: Talk to teej about this.
+    --- Visual selection marks are only set in place post visual selection.
+    --- that means for this function to work i must escape out of visual mode
+    --- which i dislike very much.  because maybe you dont want this
+    ---
+    --- Therefore i did something so very cursed.  escape sets the mark, gv sets
+    --- the previous visual selection.  super cursed
+    reselect()
+
     local context = get_context("visual")
     local range = Range.from_visual_selection()
     ops.visual(context, range)

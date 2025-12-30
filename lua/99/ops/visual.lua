@@ -1,21 +1,26 @@
 local Request = require("99.request")
 local RequestStatus = require("99.ops.request_status")
 local Mark = require("99.ops.marks")
-local Range = require("99.geo").Range
+local geo = require("99.geo")
+local Range = geo.Range
+local Point = geo.Point
 local make_clean_up = require("99.ops.clean-up")
 
 --- @param context _99.RequestContext
 --- @param range _99.Range
 local function visual(context, range)
+    local logger = context.logger:set_area("visual")
+
     local request = Request.new(context)
     local top_mark, bottom_mark = Mark.mark_range(range)
     context.marks.top_mark = top_mark
     context.marks.bottom_mark = bottom_mark
 
+    logger:debug("visual request start", "start", Point.from_mark(top_mark), "end", Point.from_mark(bottom_mark))
+
     local display_ai_status = context._99.ai_stdout_rows > 1
     local top_status = RequestStatus.new(250, context._99.ai_stdout_rows or 1, "Implementing...")
     local bottom_status = RequestStatus.new(250, 1, "Implementing...")
-    local logger = context.logger:set_area("visual")
 
     local clean_up = make_clean_up(context, function()
         top_status:stop()
@@ -24,8 +29,7 @@ local function visual(context, range)
         request:cancel()
     end)
 
-    request:add_prompt_content(context._99.prompts.prompts.visual_selection)
-
+    request:add_prompt_content(context._99.prompts.prompts.visual_selection(range))
     top_status:start()
     bottom_status:start()
     request:start({

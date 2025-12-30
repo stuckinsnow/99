@@ -45,7 +45,9 @@ function OpenCodeProvider:make_request(query, request, observer)
         observer.on_complete(status, text)
     end)
 
-    vim.system({ "opencode", "run", "-m", request.context.model, query }, {
+    local command = { "opencode", "run", "-m", request.context.model, query }
+    logger:debug("make_request", "command", command)
+    vim.system(command, {
         text = true,
         stdout = vim.schedule_wrap(function(err, data)
             logger:debug("stdout", "data", data)
@@ -73,7 +75,7 @@ function OpenCodeProvider:make_request(query, request, observer)
                 observer.on_stderr(data)
             end
         end),
-    }, function(obj)
+    }, vim.schedule_wrap(function(obj)
         if request:is_cancelled() then
             once_complete("cancelled", "")
             logger:debug("on_complete: request has been cancelled")
@@ -96,7 +98,7 @@ function OpenCodeProvider:make_request(query, request, observer)
                 once_complete("failed", "unable to retrieve response from llm")
             end
         end)
-    end)
+    end))
 end
 
 --- @param request _99.Request

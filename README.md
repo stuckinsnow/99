@@ -1,31 +1,3 @@
-### TODO
-- Finish Context -> RequestContext refactor
-  * which should consider logger
-- Fill in function tests should be reshaped.
- * there should be one test to validate basic behavior. no more programmatic tests
- * there should be a range test for replacing text
- * fill in function update code should be redone, its much simplier now
-- implement function
- * Point should get a insert code at function? ... maybe?
-   * perhaps Mark should get that, could be nice.
-- if the function's definition in typescript is mutli-line
- * will have to get more clever with how i do function start, either body if body is available or function def + 1 line
-
-```typescript
-function display_text(
-  game_state: GameState,
-  text: string,
-  x: number,
-  y: number,
-): void {
-  const ctx = game_state.canvas.getContext("2d");
-  assert(ctx, "cannot get game context");
-  ctx.fillStyle = "white";
-  ctx.fillText(text, x, y);
-}
-```
-
-Then the virtual text will be displayed one line below "function" instead of first line in body
 ## The AI Agent That Neovim Deserves
 This is an example repo where i want to test what i think the ideal AI workflow
 is for people who dont have "skill issues."  This is meant to streamline the requests to AI and limit them it restricted areas.  For more general requests, please just use opencode.  Dont use neovim.
@@ -51,6 +23,16 @@ I make the assumption you are using Lazy
 					path = "/tmp/" .. basename .. ".99.debug",
 					print_on_error = true,
 				},
+
+                --- WARNING: if you change cwd then this is likely broken
+                --- ill likely fix this in a later change
+                ---
+                --- md_files is a list of files to look for and auto add based on the location
+                --- of the originating request.  That means if you are at /foo/bar/baz.lua
+                --- the system will automagically look for:
+                --- /foo/bar/AGENT.md
+                --- /foo/AGENT.md
+                --- assuming that /foo is project root (based on cwd)
 				md_files = {
 					"AGENT.md",
 				},
@@ -60,10 +42,6 @@ I make the assumption you are using Lazy
 			vim.keymap.set("n", "<leader>9f", function()
 				_99.fill_in_function()
 			end)
-			vim.keymap.set("n", "<leader>9i", function()
-				_99.implement_fn()
-			end)
-
             -- take extra note that i have visual selection only in v mode
             -- technically whatever your last visual selection is, will be used
             -- so i have this set to visual mode so i dont screw up and use an
@@ -74,9 +52,17 @@ I make the assumption you are using Lazy
 			vim.keymap.set("v", "<leader>9v", function()
 				_99.visual_selection()
 			end)
+
+            --- if you have a request you dont want to make any changes, just cancel it
+			vim.keymap.set("v", "<leader>9s", function()
+				_99.stop_all_requests()
+			end)
 		end,
 	},
 ```
+
+## API
+You can see the full api at [99 API](./lua/99/init.lua)
 
 ## Reporting a bug
 To report a bug, please provide the full running debug logs.  This may require
@@ -85,6 +71,47 @@ a bit of back and forth.
 Please do not request features.  We will hold a public discussion on Twitch about
 features, which will be a much better jumping point then a bunch of requests that i have to close down.  If you do make a feature request ill just shut it down instantly.
 
+### The logs
+To get the _last_ run's logs execute `:lua require("99").view_logs()`.  If this happens to not be the log, you can navigate the logs with:
+
+```lua
+function _99.prev_request_logs() ... end
+function _99.next_request_logs() ... end
+```
+
+### Dont forget
+If there are secrets or other information in the logs you want to be removed make sure that you delete the `query` printing.  This will likely contain information you may not want to share.
+
 ### The Great Twitch Discussion
 I will conduct a stream on Jan 30 at 11am The Lords Time (Montana Time/Mountain Time (same thing))
 we will do an extensive deep dive on 99 and what we think is good and bad.
+
+### Known usability issues
+* long function definition issues.
+```typescript
+function display_text(
+  game_state: GameState,
+  text: string,
+  x: number,
+  y: number,
+): void {
+  const ctx = game_state.canvas.getContext("2d");
+  assert(ctx, "cannot get game context");
+  ctx.fillStyle = "white";
+  ctx.fillText(text, x, y);
+}
+```
+
+Then the virtual text will be displayed one line below "function" instead of first line in body
+
+* in lua and likely jsdoc, the replacing function will duplicate comment definitions
+  * this wont happen in languages with types in the syntax
+
+* visual selection sends the whole file.  there is likely a better way to use
+  treesitter to make the selection of the content being sent more sensible.
+
+* for both fill in function and visual there should be a better way to gather
+context.  I think that treesitter + lsp could be really powerful.  I am going
+to experiment with this more once i get access to the FIM models.  This could
+make the time to completion less than a couple seconds, which would be
+incredible

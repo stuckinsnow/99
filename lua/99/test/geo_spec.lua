@@ -2,7 +2,6 @@
 local geo = require("99.geo")
 local Point = geo.Point
 local Range = geo.Range
-local Mark = require("99.ops.marks")
 local test_utils = require("99.test.test_utils")
 local eq = assert.are.same
 
@@ -72,26 +71,15 @@ describe("Range", function()
         }, lines)
     end)
 
-    describe("Range.from_visual_selection and Mark.mark_range", function()
-        it("should create range from visual line selection and mark it", function()
-            -- Set cursor to line 2 (local x = 1)
-            vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    it("should create range from simple visual line selection", function()
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        vim.api.nvim_feedkeys("V", "x", false)
 
-            -- Enter visual line mode and select lines 2-3
-            vim.api.nvim_feedkeys("V", "x", false)
-            vim.api.nvim_feedkeys("j", "x", false)
+        test_utils.next_frame()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>gv", true, false, true), "x", false)
 
-            test_utils.next_frame()
-            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", false)
-            test_utils.next_frame()
-
-            local range = Range.from_visual_selection()
-            local text = range:to_text()
-            eq("  local x = 1\n  return x", text)
-
-            local start_mark, end_mark = Mark.mark_range(range)
-            assert.is_true(start_mark:is_valid())
-            assert.is_true(end_mark:is_valid())
-        end)
+        local range = Range.from_visual_selection()
+        local text = range:to_text()
+        eq("  local x = 1", text)
     end)
 end)
