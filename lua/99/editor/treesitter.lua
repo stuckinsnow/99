@@ -23,13 +23,66 @@ local fn_call_query = "99-fn-call"
 ---@param lang string
 local function tree_root(buffer, lang)
   -- Load the parser and the query.
+  print(
+    "[treesitter] Attempting to get parser for buffer="
+      .. buffer
+      .. ", lang="
+      .. tostring(lang)
+  )
+  Logger:debug("tree_root called", "buffer", buffer, "lang", lang, "id", "69")
+
   local ok, parser = pcall(vim.treesitter.get_parser, buffer, lang)
   if not ok then
+    print("[treesitter] ERROR: Failed to get parser - " .. tostring(parser))
+    Logger:debug("Failed to get parser", "error", tostring(parser), "id", "69")
     return nil
   end
 
-  local tree = parser:parse()[1]
-  return tree:root()
+  print("[treesitter] Parser obtained successfully, type=" .. type(parser))
+  Logger:debug("Parser obtained", "parser_type", type(parser), "id", "69")
+
+  local parse_ok, trees = pcall(function()
+    return parser:parse()
+  end)
+  if not parse_ok then
+    print("[treesitter] ERROR: Failed to parse - " .. tostring(trees))
+    Logger:debug("Failed to parse", "error", tostring(trees), "id", "69")
+    return nil
+  end
+
+  print(
+    "[treesitter] Parse completed, trees count=" .. (trees and #trees or "nil")
+  )
+  Logger:debug(
+    "Parse completed",
+    "trees_count",
+    trees and #trees or 0,
+    "id",
+    "69"
+  )
+
+  if not trees or #trees == 0 then
+    print("[treesitter] ERROR: No trees returned from parse")
+    Logger:debug("No trees returned", "id", "69")
+    return nil
+  end
+
+  local tree = trees[1]
+  print("[treesitter] Getting root from tree[1], tree=" .. tostring(tree))
+  Logger:debug("Got tree[1]", "tree_type", type(tree), "id", "69")
+
+  local root_ok, root = pcall(function()
+    return tree:root()
+  end)
+  if not root_ok then
+    print("[treesitter] ERROR: Failed to get root - " .. tostring(root))
+    Logger:debug("Failed to get root", "error", tostring(root), "id", "69")
+    return nil
+  end
+
+  print("[treesitter] Root obtained successfully, type=" .. type(root))
+  Logger:debug("Root obtained", "root_type", type(root), "id", "69")
+  return root
 end
 
 --- @param context _99.RequestContext
@@ -147,10 +200,10 @@ function M.containing_function(context, cursor)
   local lang = context.file_type
   local logger = context and context.logger:set_area("treesitter") or Logger
 
-  logger:error("loading lang", "buffer", buffer, "lang", lang)
+  logger:debug("loading lang", "buffer", buffer, "lang", lang)
   local root = tree_root(buffer, lang)
   if not root then
-    logger:debug("LSP: could not find tree root")
+    logger:debug("could not find tree root")
     return nil
   end
 

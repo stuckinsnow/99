@@ -211,11 +211,28 @@ local function get_lsp_document_symbols(bufnr, cb)
   )
 end
 
+--- @class _99.lsp.ExportPosition
+--- @field name string
+--- @field line number
+--- @field col number
+
+--- @class _99.lsp.ExportMember
+--- @field name string
+--- @field line number
+--- @field col number
+--- @field kind number|nil
+
+--- @class _99.lsp.ExportMetadata
+--- @field kind number|nil
+--- @field members _99.lsp.ExportMember[]|nil
+
+--- @alias _99.lsp.ExportMeta table<string, _99.lsp.ExportMetadata>
+
 --- Extracts export keys and metadata from LSP document symbols.
 ---
 --- @param symbols table|nil LSP document symbols
---- @return { name: string, line: number, col: number }[] export_keys
---- @return table<string, { kind: number|nil, members: { name: string, line: number, col: number, kind: number|nil }[]|nil }>
+--- @return _99.lsp.ExportPosition[] export_keys
+--- @return _99.lsp.ExportMeta export_meta
 local function document_symbols_to_exports(symbols)
   local export_keys = {}
   local export_meta = {}

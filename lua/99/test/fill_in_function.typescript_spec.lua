@@ -10,7 +10,7 @@ describe("typescript", function()
       "",
       "const foo = function() {}",
     }
-    local p, buffer = test_utils.fif_setup(ts_content, 2, 12, "typescript")
+    local p, buffer = test_utils.fif_setup(ts_content, 2, 16, "typescript")
     local state = _99.__get_state()
 
     _99.fill_in_function()
