@@ -70,7 +70,6 @@ function Point.from_0_based(row, col)
   }, Point)
 end
 
-
 function Point:from_cursor()
   local point = setmetatable({
     row = 0,
@@ -226,8 +225,11 @@ function Range.from_visual_selection()
   --- which will cause marks to fail. so we have to correct it to the literal
   --- row length
   local end_row, _ = end_:to_vim()
-  local end_line = vim.api.nvim_buf_get_lines(buffer, end_row, end_row + 1, false)
-  local end_col = 0
+  local end_line =
+    vim.api.nvim_buf_get_lines(buffer, end_row, end_row + 1, false)
+
+  --- @type number
+  local end_col
 
   --- another bug where mark >' is beyond the editor.
   --- therefore will just grab from start to end and use the last captured row

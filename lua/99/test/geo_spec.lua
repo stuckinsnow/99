@@ -119,7 +119,14 @@ describe("Range", function()
       vim.fn.setpos("'>", { small_buffer, 100, 1, 0 })
       local range = Range.from_visual_selection()
 
-      eq(Range:new(small_buffer, Point:from_1_based(1, 1), Point:from_1_based(2, 8)), range)
+      eq(
+        Range:new(
+          small_buffer,
+          Point:from_1_based(1, 1),
+          Point:from_1_based(2, 8)
+        ),
+        range
+      )
     end
   )
 
