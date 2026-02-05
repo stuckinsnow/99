@@ -1,6 +1,7 @@
 local Request = require("99.request")
 local RequestStatus = require("99.ops.request_status")
 local Mark = require("99.ops.marks")
+local InlineMarks = require("99.ops.inline-marks")
 local geo = require("99.geo")
 local make_clean_up = require("99.ops.clean-up")
 local Agents = require("99.extensions.agents")
@@ -37,9 +38,17 @@ local function over_range(context, range, opts)
     top_mark
   )
   local bottom_status = RequestStatus.new(250, 1, "Implementing", bottom_mark)
+
+  local inline_marks_ns = InlineMarks.create({
+    bufnr = range.buffer,
+    start_line = range.start.row,
+    end_line = range.end_.row,
+  }, context.xid)
+
   local clean_up = make_clean_up(context, function()
     top_status:stop()
     bottom_status:stop()
+    InlineMarks.clear(inline_marks_ns)
     context:clear_marks()
     request:cancel()
   end)
@@ -60,8 +69,12 @@ local function over_range(context, range, opts)
   end
 
   request:add_prompt_content(full_prompt)
-  top_status:start()
-  bottom_status:start()
+
+  -- Only start the old spinner if inline marks are not enabled
+  if not InlineMarks.is_enabled() then
+    top_status:start()
+    bottom_status:start()
+  end
   request:start({
     on_complete = function(status, response)
       vim.schedule(clean_up)

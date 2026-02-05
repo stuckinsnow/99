@@ -2,6 +2,7 @@ local geo = require("99.geo")
 local Point = geo.Point
 local Request = require("99.request")
 local Mark = require("99.ops.marks")
+local InlineMarks = require("99.ops.inline-marks")
 local editor = require("99.editor")
 local RequestStatus = require("99.ops.request_status")
 local Window = require("99.window")
@@ -81,18 +82,32 @@ local function fill_in_function(context, opts)
 
   request:add_prompt_content(full_prompt)
 
+  -- Create inline marks for visual feedback
+  -- func_range.start.row and func_range.end_.row are already 1-based
+  local func_range = func.function_range
+  local inline_marks_ns = InlineMarks.create({
+    bufnr = buffer,
+    start_line = func_range.start.row,
+    end_line = func_range.end_.row,
+  }, context.xid)
+
   local request_status = RequestStatus.new(
     250,
     context._99.ai_stdout_rows,
     "Loading",
     context.marks.function_location
   )
-  request_status:start()
+
+  -- Only start the old spinner if inline marks are not enabled
+  if not InlineMarks.is_enabled() then
+    request_status:start()
+  end
 
   local clean_up = make_clean_up(context, function()
     context:clear_marks()
     request:cancel()
     request_status:stop()
+    InlineMarks.clear(inline_marks_ns)
   end)
 
   request:start({
