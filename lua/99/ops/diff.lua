@@ -1,9 +1,9 @@
 --- Diff visualization with accept/reject flow
 --- Shows AI changes in a diff view before applying
---- Supports multiple concurrent pending changes
 
 --- @class _99.Diff.Opts
 --- @field enabled boolean Whether diff visualization is enabled
+--- @field highlight_numbers_on_accept boolean Whether to highlight line numbers after accepting
 
 --- @class _99.Diff.PendingChange
 --- @field id number
@@ -12,12 +12,13 @@
 --- @field new_lines string[]
 --- @field start_row number 0-indexed
 --- @field end_row number 0-indexed (exclusive)
---- @field extmark_id number|nil
+--- @field extmark_ids number[] All extmark IDs for this change
 
 local M = {}
 
 local default_opts = {
   enabled = false,
+  highlight_numbers_on_accept = true,
 }
 
 --- @type _99.Diff.Opts
@@ -46,44 +47,35 @@ local function show_diff_overlay(change)
       return
     end
 
-    -- Build virtual lines for the diff
+    -- Replace the buffer lines with the new code
+    vim.api.nvim_buf_set_lines(bufnr, start_row, change.end_row, false, new)
+
+    change.extmark_ids = {}
+
+    -- Build virtual lines for the original code (red)
     local virt_lines = {}
-
-    -- Add header
-    table.insert(virt_lines, { { "── AI Changes (9a to accept, 9r to reject) ──", "WarningMsg" } })
-    table.insert(virt_lines, { { "", "Normal" } })
-
-    -- Show removed lines (original) in red
     for _, line in ipairs(original) do
       table.insert(virt_lines, { { "- " .. line, "DiffDelete" } })
     end
 
-    table.insert(virt_lines, { { "", "Normal" } })
-
-    -- Show added lines (new) in green
-    for _, line in ipairs(new) do
-      table.insert(virt_lines, { { "+ " .. line, "DiffAdd" } })
-    end
-
-    table.insert(virt_lines, { { "", "Normal" } })
-    table.insert(virt_lines, { { "────────────────────────────────────────────", "WarningMsg" } })
-
     -- Place virtual lines above the changed region
-    local line_count = vim.api.nvim_buf_line_count(bufnr)
-    local place_row = start_row
-    if place_row >= line_count then
-      place_row = line_count - 1
-    end
-    if place_row < 0 then
-      place_row = 0
-    end
-
-    local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ns_id, place_row, 0, {
+    local virt_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ns_id, start_row, 0, {
       virt_lines = virt_lines,
       virt_lines_above = true,
     })
+    table.insert(change.extmark_ids, virt_extmark_id)
 
-    change.extmark_id = extmark_id
+    -- Highlight the new code region
+    local new_end_row = start_row + #new
+    for i = start_row, new_end_row - 1 do
+      local hl_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ns_id, i, 0, {
+        line_hl_group = "DiffAdd",
+      })
+      table.insert(change.extmark_ids, hl_extmark_id)
+    end
+
+    -- Update end_row to reflect the new line count
+    change.end_row = new_end_row
   end)
 end
 
@@ -92,48 +84,11 @@ end
 --- @param row number 0-indexed cursor row
 --- @return _99.Diff.PendingChange|nil
 local function find_change_at_cursor(bufnr, row)
-  -- First try exact match - cursor is within the change region
   for _, change in pairs(pending_changes) do
     if change.bufnr == bufnr then
       if row >= change.start_row and row < change.end_row then
         return change
       end
-    end
-  end
-
-  -- Second try - find closest change above or at cursor
-  local closest = nil
-  local closest_dist = math.huge
-
-  for _, change in pairs(pending_changes) do
-    if change.bufnr == bufnr then
-      -- Check distance from cursor to change region
-      local dist
-      if row < change.start_row then
-        dist = change.start_row - row
-      elseif row >= change.end_row then
-        dist = row - change.end_row + 1
-      else
-        dist = 0
-      end
-
-      if dist < closest_dist then
-        closest_dist = dist
-        closest = change
-      end
-    end
-  end
-
-  return closest
-end
-
---- Find any pending change in the buffer (fallback)
---- @param bufnr number
---- @return _99.Diff.PendingChange|nil
-local function find_any_change_in_buffer(bufnr)
-  for _, change in pairs(pending_changes) do
-    if change.bufnr == bufnr then
-      return change
     end
   end
   return nil
@@ -145,19 +100,24 @@ local function accept_change(change)
   local bufnr = change.bufnr
   local start_row = change.start_row
   local end_row = change.end_row
-  local new_lines = change.new_lines
 
-  -- Remove extmark
-  if change.extmark_id and vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_del_extmark, bufnr, ns_id, change.extmark_id)
+  -- Remove all extmarks
+  if change.extmark_ids and vim.api.nvim_buf_is_valid(bufnr) then
+    for _, extmark_id in ipairs(change.extmark_ids) do
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, ns_id, extmark_id)
+    end
   end
 
-  -- Remove from pending
+  -- Add number highlighting to show accepted AI code
+  if current_opts.highlight_numbers_on_accept then
+    for i = start_row, end_row - 1 do
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, i, 0, {
+        number_hl_group = "DiffAdd",
+      })
+    end
+  end
+
   pending_changes[change.id] = nil
-
-  -- Apply the changes
-  vim.api.nvim_buf_set_lines(bufnr, start_row, end_row, false, new_lines)
-
   vim.notify("AI changes accepted", vim.log.levels.INFO)
 end
 
@@ -165,61 +125,22 @@ end
 --- @param change _99.Diff.PendingChange
 local function reject_change(change)
   local bufnr = change.bufnr
+  local start_row = change.start_row
+  local end_row = change.end_row
+  local original_lines = change.original_lines
 
-  -- Remove extmark
-  if change.extmark_id and vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_del_extmark, bufnr, ns_id, change.extmark_id)
+  -- Remove all extmarks
+  if change.extmark_ids and vim.api.nvim_buf_is_valid(bufnr) then
+    for _, extmark_id in ipairs(change.extmark_ids) do
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, ns_id, extmark_id)
+    end
   end
 
-  -- Remove from pending
+  -- Restore original lines
+  vim.api.nvim_buf_set_lines(bufnr, start_row, end_row, false, original_lines)
+
   pending_changes[change.id] = nil
-
   vim.notify("AI changes rejected", vim.log.levels.INFO)
-end
-
---- Set up global keymaps (only once)
-local keymaps_setup = false
-local function setup_keymaps()
-  if keymaps_setup then
-    return
-  end
-  keymaps_setup = true
-
-  vim.keymap.set("n", "9a", function()
-    local bufnr = vim.api.nvim_get_current_buf()
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local row = cursor[1] - 1 -- Convert to 0-indexed
-
-    local change = find_change_at_cursor(bufnr, row)
-    if not change then
-      -- Fallback: find any change in buffer
-      change = find_any_change_in_buffer(bufnr)
-    end
-
-    if change then
-      accept_change(change)
-    else
-      vim.notify("No pending AI changes at cursor", vim.log.levels.WARN)
-    end
-  end, { desc = "Accept AI changes at cursor" })
-
-  vim.keymap.set("n", "9r", function()
-    local bufnr = vim.api.nvim_get_current_buf()
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local row = cursor[1] - 1 -- Convert to 0-indexed
-
-    local change = find_change_at_cursor(bufnr, row)
-    if not change then
-      -- Fallback: find any change in buffer
-      change = find_any_change_in_buffer(bufnr)
-    end
-
-    if change then
-      reject_change(change)
-    else
-      vim.notify("No pending AI changes at cursor", vim.log.levels.WARN)
-    end
-  end, { desc = "Reject AI changes at cursor" })
 end
 
 --- Store a pending change for review
@@ -227,10 +148,22 @@ end
 --- @param start_row number 0-indexed
 --- @param end_row number 0-indexed (exclusive)
 --- @param new_lines string[]
---- @return boolean success Whether the change was stored (false if diff disabled)
+--- @return boolean success
 function M.store_pending(bufnr, start_row, end_row, new_lines)
   if not current_opts.enabled then
     return false
+  end
+
+  -- Remove leading empty line if present (added by over-range.lua HACK)
+  -- and adjust start_row to compensate
+  if #new_lines > 0 and new_lines[1] == "" then
+    table.remove(new_lines, 1)
+    start_row = start_row + 1
+  end
+
+  -- Remove trailing empty line if present
+  if #new_lines > 0 and new_lines[#new_lines] == "" then
+    table.remove(new_lines, #new_lines)
   end
 
   -- Get original lines before they're replaced
@@ -244,63 +177,40 @@ function M.store_pending(bufnr, start_row, end_row, new_lines)
     new_lines = new_lines,
     start_row = start_row,
     end_row = end_row,
-    extmark_id = nil,
+    extmark_ids = {},
   }
 
   pending_changes[change.id] = change
   show_diff_overlay(change)
-  setup_keymaps()
 
   return true
 end
 
---- Accept the change at cursor (called by keymap)
+--- Accept the change at cursor
 function M.accept()
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local row = cursor[1] - 1
 
-  local change = find_change_at_cursor(bufnr, row) or find_any_change_in_buffer(bufnr)
+  local change = find_change_at_cursor(bufnr, row)
   if change then
     accept_change(change)
+  else
+    vim.notify("No pending AI changes at cursor", vim.log.levels.WARN)
   end
 end
 
---- Reject the change at cursor (called by keymap)
+--- Reject the change at cursor
 function M.reject()
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local row = cursor[1] - 1
 
-  local change = find_change_at_cursor(bufnr, row) or find_any_change_in_buffer(bufnr)
+  local change = find_change_at_cursor(bufnr, row)
   if change then
     reject_change(change)
-  end
-end
-
---- Check if there are any pending changes
---- @return boolean
-function M.has_pending()
-  return next(pending_changes) ~= nil
-end
-
---- Get count of pending changes
---- @return number
-function M.pending_count()
-  local count = 0
-  for _ in pairs(pending_changes) do
-    count = count + 1
-  end
-  return count
-end
-
---- Clear all pending changes
-function M.clear_all()
-  for id, change in pairs(pending_changes) do
-    if change.extmark_id and vim.api.nvim_buf_is_valid(change.bufnr) then
-      pcall(vim.api.nvim_buf_del_extmark, change.bufnr, ns_id, change.extmark_id)
-    end
-    pending_changes[id] = nil
+  else
+    vim.notify("No pending AI changes at cursor", vim.log.levels.WARN)
   end
 end
 
