@@ -2,6 +2,7 @@ local Request = require("99.request")
 local RequestStatus = require("99.ops.request_status")
 local Mark = require("99.ops.marks")
 local InlineMarks = require("99.ops.inline-marks")
+local Diff = require("99.ops.diff")
 local geo = require("99.geo")
 local make_clean_up = require("99.ops.clean-up")
 local Agents = require("99.extensions.agents")
@@ -103,6 +104,17 @@ local function over_range(context, range, opts)
         --- that way this appears to be added to "the same line" as the visual selection was
         --- originally take from
         table.insert(lines, 1, "")
+
+        -- If diff is enabled, store as pending change for review
+        if Diff.is_enabled() then
+          local s_row, _ = new_range.start:to_vim()
+          local e_row, _ = new_range.end_:to_vim()
+          local stored = Diff.store_pending(range.buffer, s_row, e_row + 1, lines)
+          if stored then
+            logger:debug("stored pending change for diff review")
+            return
+          end
+        end
 
         new_range:replace_text(lines)
       end

@@ -3,6 +3,7 @@ local Point = geo.Point
 local Request = require("99.request")
 local Mark = require("99.ops.marks")
 local InlineMarks = require("99.ops.inline-marks")
+local Diff = require("99.ops.diff")
 local editor = require("99.editor")
 local RequestStatus = require("99.ops.request_status")
 local Window = require("99.window")
@@ -11,7 +12,8 @@ local Agents = require("99.extensions.agents")
 
 --- @param context _99.RequestContext
 --- @param res string
-local function update_file_with_changes(context, res)
+--- @param func _99.treesitter.Function
+local function update_file_with_changes(context, res, func)
   local buffer = context.buffer
   local mark = context.marks.function_location
   local logger =
@@ -23,16 +25,24 @@ local function update_file_with_changes(context, res)
   )
   logger:assert(mark:is_valid(), "mark is no longer valid")
 
-  local func_start = Point.from_mark(mark)
-  local ts = editor.treesitter
-  local func = ts.containing_function(context, func_start)
-
   logger:assert(
     func,
     "update_file_with_changes: unable to find function at mark location"
   )
 
   local lines = vim.split(res, "\n")
+  local func_range = func.function_range
+  local start_row, _ = func_range.start:to_vim()
+  local end_row, _ = func_range.end_:to_vim()
+
+  -- If diff is enabled, store as pending change for review
+  if Diff.is_enabled() then
+    local stored = Diff.store_pending(buffer, start_row, end_row + 1, lines)
+    if stored then
+      logger:debug("stored pending change for diff review")
+      return
+    end
+  end
 
   -- lua docs ignore next error, func being tested already in assert
   -- TODO: fix this?
@@ -132,7 +142,7 @@ local function fill_in_function(context, opts)
         logger:debug("fill_in_function was cancelled")
         -- TODO: small status window here
       elseif status == "success" then
-        update_file_with_changes(context, response)
+        update_file_with_changes(context, response, func)
       end
     end,
     on_stderr = function(line)

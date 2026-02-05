@@ -13,6 +13,7 @@ local Agents = require("99.extensions.agents")
 local Providers = require("99.providers")
 local time = require("99.time")
 local InlineMarks = require("99.ops.inline-marks")
+local Diff = require("99.ops.diff")
 
 ---@param path_or_rule string | _99.Agents.Rule
 ---@return _99.Agents.Rule | string
@@ -101,7 +102,8 @@ end
 --- @field display_errors? boolean
 --- @field auto_add_skills? boolean
 --- @field completion _99.Completion?
---- @field inline_marks _99.InlineMarks.Opts? mode: "off" | "signs" | "spinner"
+--- @field inline_marks _99.InlineMarks.Opts?
+--- @field diff _99.Diff.Opts?
 
 --- unanswered question -- will i need to queue messages one at a time or
 --- just send them all...  So to prepare ill be sending around this state object
@@ -493,6 +495,11 @@ function _99.setup(opts)
   -- Setup inline marks if configured
   if opts.inline_marks then
     InlineMarks.setup(opts.inline_marks)
+  end
+
+  -- Setup diff if configured
+  if opts.diff then
+    Diff.setup(opts.diff)
   end
 end
 
