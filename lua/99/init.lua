@@ -15,6 +15,95 @@ local time = require("99.time")
 local InlineMarks = require("99.ops.inline-marks")
 local Diff = require("99.ops.diff")
 
+--- @return string
+local function get_model_cache_path()
+  return vim.fn.stdpath("cache") .. "/99-model.txt"
+end
+
+--- @return string
+local function get_provider_cache_path()
+  return vim.fn.stdpath("cache") .. "/99-provider.txt"
+end
+
+--- @return table<string, string>
+local function read_cache()
+  local file = io.open(get_model_cache_path(), "r")
+  if not file then
+    return {}
+  end
+  local entries = {}
+  for line in file:lines() do
+    line = vim.trim(line)
+    local sep = line:find(":", 1, true)
+    if sep then
+      entries[line:sub(1, sep - 1)] = line:sub(sep + 1)
+    end
+  end
+  file:close()
+  return entries
+end
+
+--- @param entries table<string, string>
+local function write_cache(entries)
+  local file = io.open(get_model_cache_path(), "w")
+  if not file then
+    return
+  end
+  for provider_name, model in pairs(entries) do
+    file:write(provider_name .. ":" .. model .. "\n")
+  end
+  file:close()
+end
+
+--- @param provider_name string
+local function save_provider_to_cache(provider_name)
+  if not provider_name or provider_name == "" then
+    return
+  end
+  local file = io.open(get_provider_cache_path(), "w")
+  if not file then
+    return
+  end
+  file:write(provider_name .. "\n")
+  file:close()
+end
+
+--- @return string|nil
+local function load_provider_from_cache()
+  local file = io.open(get_provider_cache_path(), "r")
+  if not file then
+    return nil
+  end
+  local provider_name = file:read("*l")
+  file:close()
+  if not provider_name or provider_name == "" then
+    return nil
+  end
+  return vim.trim(provider_name)
+end
+
+--- @param model string
+--- @param provider _99.Providers.BaseProvider
+local function save_model_to_cache(model, provider)
+  if not model or model == "" then
+    return
+  end
+  local entries = read_cache()
+  entries[provider:_get_provider_name()] = model
+  write_cache(entries)
+end
+
+--- @param provider _99.Providers.BaseProvider
+--- @return string|nil
+local function load_model_from_cache(provider)
+  local entries = read_cache()
+  local model = entries[provider:_get_provider_name()]
+  if not model or model == "" then
+    return nil
+  end
+  return model
+end
+
 ---@param path_or_rule string | _99.Agents.Rule
 ---@return _99.Agents.Rule | string
 local function expand(path_or_rule)
@@ -74,7 +163,7 @@ end
 --- @return _99.StateProps
 local function create_99_state()
   return {
-    model = "opencode/claude-sonnet-4-5",
+    model = "",
     md_files = {},
     prompts = require("99.prompt-settings"),
     ai_stdout_rows = 3,
@@ -452,7 +541,26 @@ function _99.setup(opts)
   opts = opts or {}
 
   _99_state = _99_State.new()
-  _99_state.provider_override = opts.provider
+
+  -- Load cached provider first
+  local cached_provider_name = load_provider_from_cache()
+  if cached_provider_name then
+    if cached_provider_name == "OpenCodeProvider" then
+      _99_state.provider_override = Providers.OpenCodeProvider
+    elseif cached_provider_name == "ClaudeCodeProvider" then
+      _99_state.provider_override = Providers.ClaudeCodeProvider
+    elseif cached_provider_name == "CursorAgentProvider" then
+      _99_state.provider_override = Providers.CursorAgentProvider
+    elseif cached_provider_name == "KiroProvider" then
+      _99_state.provider_override = Providers.KiroProvider
+    end
+  end
+
+  -- Override with opts.provider if provided
+  if opts.provider then
+    _99_state.provider_override = opts.provider
+  end
+
   _99_state.completion = opts.completion
     or {
       source = nil,
@@ -468,21 +576,32 @@ function _99.setup(opts)
     crules[i] = str
   end
 
+  local augroup = vim.api.nvim_create_augroup("99_setup", { clear = true })
   vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = augroup,
     callback = function()
       _99.stop_all_requests()
+      local p = _99_state.provider_override or Providers.OpenCodeProvider
+      save_model_to_cache(_99_state.model, p)
+      save_provider_to_cache(p:_get_provider_name())
     end,
   })
 
   Logger:configure(opts.logger)
 
+  local provider = _99_state.provider_override or Providers.OpenCodeProvider
   if opts.model then
     assert(type(opts.model) == "string", "opts.model is not a string")
     _99_state.model = opts.model
   else
-    local provider = opts.provider or Providers.OpenCodeProvider
-    if provider._get_default_model then
-      _99_state.model = provider._get_default_model()
+    local cached_model = load_model_from_cache(provider)
+    if cached_model then
+      _99_state.model = cached_model
+    else
+      local default_model = provider:_get_default_model()
+      if default_model then
+        _99_state.model = default_model
+      end
     end
   end
 
@@ -533,6 +652,202 @@ end
 function _99.set_model(model)
   _99_state.model = model
   return _99
+end
+
+--- @return string
+function _99.get_model()
+  return _99_state.model
+end
+
+--- Get status line component with provider, model, and spinner
+--- @return string
+function _99.statusline()
+  local active_count = _99_state:active_request_count()
+
+  if active_count > 0 then
+    local provider = _99_state.provider_override or Providers.OpenCodeProvider
+    local provider_name = provider:_get_provider_name():gsub("Provider", "")
+    local model = _99_state.model or "none"
+
+    -- Shorten model name for display
+    local short_model = model:gsub("opencode/", "")
+
+    -- For opencode models with a provider prefix (e.g., githubcopilot/something), just show that
+    if provider_name == "OpenCode" and short_model:match("^[^/]+/") then
+      -- Model has a prefix like "githubcopilot/", so just show the model
+      local display = short_model:gsub("claude%-", "")
+      local spinner_frames =
+        { "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", "⣾" }
+      local frame_idx = math.floor(vim.uv.now() / 100) % #spinner_frames + 1
+      return string.format("%s %s", display, spinner_frames[frame_idx])
+    end
+
+    -- Shorten provider names for display
+    if provider_name == "OpenCode" then
+      provider_name = "OC"
+    elseif provider_name == "Kiro" then
+      provider_name = "Kiro"
+    elseif provider_name == "Claude" then
+      provider_name = "Claude"
+    elseif provider_name == "CursorAgent" then
+      provider_name = "Cursor"
+    end
+
+    short_model = short_model:gsub("claude%-", "")
+
+    local spinner_frames =
+      { "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", "⣾" }
+    local frame_idx = math.floor(vim.uv.now() / 100) % #spinner_frames + 1
+    return string.format(
+      "%s %s %s",
+      provider_name,
+      short_model,
+      spinner_frames[frame_idx]
+    )
+  else
+    return ""
+  end
+end
+
+function _99.select_model()
+  local provider = _99_state.provider_override or Providers.OpenCodeProvider
+  provider.fetch_models(function(models, err)
+    if err then
+      vim.notify("99: " .. err, vim.log.levels.ERROR)
+      return
+    end
+    if not models or #models == 0 then
+      vim.notify("99: No models available", vim.log.levels.WARN)
+      return
+    end
+
+    local has_fzf, fzf = pcall(require, "fzf-lua")
+    if has_fzf then
+      fzf.fzf_exec(models, {
+        prompt = "99: Select Model (current: " .. _99_state.model .. ")> ",
+        actions = {
+          ["default"] = function(selected)
+            if not selected or #selected == 0 then
+              return
+            end
+            _99.set_model(selected[1])
+            save_model_to_cache(selected[1], provider)
+            vim.notify("99: Model set to " .. selected[1])
+          end,
+        },
+      })
+      return
+    end
+
+    local has_telescope, pickers = pcall(require, "telescope.pickers")
+    if not has_telescope then
+      vim.ui.select(models, {
+        prompt = "99: Select model (current: " .. _99_state.model .. ")",
+      }, function(choice)
+        if not choice then
+          return
+        end
+        _99.set_model(choice)
+        save_model_to_cache(choice, provider)
+        vim.notify("99: Model set to " .. choice)
+      end)
+      return
+    end
+
+    local finders = require("telescope.finders")
+    local conf = require("telescope.config").values
+    local actions = require("telescope.actions")
+    local action_state = require("telescope.actions.state")
+
+    pickers
+      .new({}, {
+        prompt_title = "99: Select Model (current: " .. _99_state.model .. ")",
+        finder = finders.new_table({ results = models }),
+        sorter = conf.generic_sorter({}),
+        attach_mappings = function(prompt_bufnr)
+          actions.select_default:replace(function()
+            actions.close(prompt_bufnr)
+            local selection = action_state.get_selected_entry()
+            if not selection then
+              return
+            end
+            _99.set_model(selection[1])
+            save_model_to_cache(selection[1], provider)
+            vim.notify("99: Model set to " .. selection[1])
+          end)
+          return true
+        end,
+      })
+      :find()
+  end)
+end
+
+function _99.select_provider()
+  local providers = {
+    { name = "OpenCodeProvider", provider = Providers.OpenCodeProvider },
+    { name = "ClaudeCodeProvider", provider = Providers.ClaudeCodeProvider },
+    { name = "CursorAgentProvider", provider = Providers.CursorAgentProvider },
+    { name = "KiroProvider", provider = Providers.KiroProvider },
+  }
+
+  local current_provider = _99_state.provider_override
+    or Providers.OpenCodeProvider
+  local current_name = current_provider:_get_provider_name()
+
+  local provider_names = {}
+  for _, p in ipairs(providers) do
+    table.insert(provider_names, p.name)
+  end
+
+  local function on_provider_selected(selected_name)
+    for _, p in ipairs(providers) do
+      if p.name == selected_name then
+        _99_state.provider_override = p.provider
+        save_provider_to_cache(p.name)
+        -- Load cached model for this provider or use default
+        local cached_model = load_model_from_cache(p.provider)
+        if cached_model then
+          _99_state.model = cached_model
+        else
+          local default_model = p.provider:_get_default_model()
+          if default_model then
+            _99_state.model = default_model
+          end
+        end
+        vim.notify("99: Provider set to " .. p.name)
+        -- Now open model selector
+        vim.schedule(function()
+          _99.select_model()
+        end)
+        break
+      end
+    end
+  end
+
+  local has_fzf, fzf = pcall(require, "fzf-lua")
+  if has_fzf then
+    fzf.fzf_exec(provider_names, {
+      prompt = "99: Select Provider (current: " .. current_name .. ")> ",
+      actions = {
+        ["default"] = function(selected)
+          if not selected or #selected == 0 then
+            return
+          end
+          on_provider_selected(selected[1])
+        end,
+      },
+    })
+    return
+  end
+
+  vim.ui.select(provider_names, {
+    prompt = "99: Select provider (current: " .. current_name .. ")",
+  }, function(choice)
+    if not choice then
+      return
+    end
+    on_provider_selected(choice)
+  end)
 end
 
 function _99.__debug()

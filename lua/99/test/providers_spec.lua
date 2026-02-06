@@ -62,6 +62,10 @@ describe("providers", function()
   end)
 
   describe("provider integration", function()
+    before_each(function()
+      os.remove(vim.fn.stdpath("cache") .. "/99-model.txt")
+    end)
+
     it("can be set as provider override", function()
       local _99 = require("99")
 

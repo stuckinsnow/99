@@ -27,7 +27,20 @@ end
 --- @class _99.Providers.BaseProvider
 --- @field _build_command fun(self: _99.Providers.BaseProvider, query: string, request: _99.Request): string[]
 --- @field _get_provider_name fun(self: _99.Providers.BaseProvider): string
+--- @field _get_default_model fun(self: _99.Providers.BaseProvider): string?
 local BaseProvider = {}
+
+function BaseProvider.fetch_models(callback)
+  callback(nil, "This provider does not support listing models")
+end
+
+function BaseProvider._get_default_model()
+  return nil
+end
+
+function BaseProvider:_get_provider_name()
+  return "BaseProvider"
+end
 
 --- @param request _99.Request
 function BaseProvider:_retrieve_response(request)
@@ -73,6 +86,7 @@ function BaseProvider:make_request(query, request, observer)
     command,
     {
       text = true,
+      stdin = false,
       stdout = vim.schedule_wrap(function(err, data)
         logger:debug("stdout", "data", data)
         if request:is_cancelled() then
@@ -145,13 +159,26 @@ function OpenCodeProvider._build_command(_, query, request)
 end
 
 --- @return string
-function OpenCodeProvider._get_provider_name()
+function OpenCodeProvider:_get_provider_name()
   return "OpenCodeProvider"
 end
 
 --- @return string
-function OpenCodeProvider._get_default_model()
-  return "opencode/claude-sonnet-4-5"
+function OpenCodeProvider:_get_default_model()
+  return "github-copilot/gpt-4.1"
+end
+
+function OpenCodeProvider.fetch_models(callback)
+  vim.system({ "opencode", "models" }, { text = true }, function(obj)
+    vim.schedule(function()
+      if obj.code ~= 0 then
+        callback(nil, "Failed to fetch models from opencode")
+        return
+      end
+      local models = vim.split(obj.stdout, "\n", { trimempty = true })
+      callback(models, nil)
+    end)
+  end)
 end
 
 --- @class ClaudeCodeProvider : _99.Providers.BaseProvider
@@ -172,13 +199,29 @@ function ClaudeCodeProvider._build_command(_, query, request)
 end
 
 --- @return string
-function ClaudeCodeProvider._get_provider_name()
+function ClaudeCodeProvider:_get_provider_name()
   return "ClaudeCodeProvider"
 end
 
 --- @return string
-function ClaudeCodeProvider._get_default_model()
+function ClaudeCodeProvider:_get_default_model()
   return "claude-sonnet-4-5"
+end
+
+-- TODO: the claude CLI doesn't support a --models command so we hardcode the list.
+-- we could use the anthropic API (https://platform.claude.com/docs/en/api/beta/models/list)
+-- but that requires the user to set up an ANTHROPIC_API_KEY which isn't ideal.
+function ClaudeCodeProvider.fetch_models(callback)
+  callback({
+    "claude-opus-4-6",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-opus-4-1",
+    "claude-sonnet-4-0",
+    "claude-opus-4-0",
+    "claude-3-7-sonnet-latest",
+  }, nil)
 end
 
 --- @class CursorAgentProvider : _99.Providers.BaseProvider
@@ -192,13 +235,32 @@ function CursorAgentProvider._build_command(_, query, request)
 end
 
 --- @return string
-function CursorAgentProvider._get_provider_name()
+function CursorAgentProvider:_get_provider_name()
   return "CursorAgentProvider"
 end
 
 --- @return string
-function CursorAgentProvider._get_default_model()
+function CursorAgentProvider:_get_default_model()
   return "sonnet-4.5"
+end
+
+function CursorAgentProvider.fetch_models(callback)
+  vim.system({ "cursor-agent", "models" }, { text = true }, function(obj)
+    vim.schedule(function()
+      if obj.code ~= 0 then
+        callback(nil, "Failed to fetch models from cursor-agent")
+        return
+      end
+      local models = {}
+      for _, line in ipairs(vim.split(obj.stdout, "\n", { trimempty = true })) do
+        local id = line:match("^(%S+)%s+%-")
+        if id then
+          table.insert(models, id)
+        end
+      end
+      callback(models, nil)
+    end)
+  end)
 end
 
 --- @class KiroProvider : _99.Providers.BaseProvider
@@ -227,6 +289,17 @@ end
 --- @return string
 function KiroProvider._get_default_model()
   return "claude-sonnet-4.5"
+end
+
+-- kiro-cli doesn't have a models command, so we hardcode the common models
+function KiroProvider.fetch_models(callback)
+  callback({
+    "claude-opus-4.6",
+    "claude-opus-4.5",
+    "claude-sonnet-4.5",
+    "claude-sonnet-4",
+    "claude-haiku-4.5",
+  }, nil)
 end
 
 return {
