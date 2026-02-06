@@ -125,10 +125,15 @@ end
 --- Create inline marks for a given context
 --- @param context _99.InlineMarks.Context
 --- @param id string|number Optional unique identifier
+--- @param show_spinner boolean|nil Whether to show the spinner (default true)
 --- @return number ns_id The namespace id for these marks
-function M.create(context, id)
+function M.create(context, id, show_spinner)
   if not current_opts.enabled then
     return -1
+  end
+
+  if show_spinner == nil then
+    show_spinner = true
   end
 
   local ns_name = "99.inline_marks_" .. tostring(id or vim.uv.hrtime())
@@ -142,7 +147,10 @@ function M.create(context, id)
   active_marks[ns_id] = mark
 
   create_sign_extmarks(context, ns_id)
-  start_spinner(mark, context)
+  
+  if show_spinner then
+    start_spinner(mark, context)
+  end
 
   return ns_id
 end

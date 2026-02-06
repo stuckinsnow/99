@@ -347,18 +347,24 @@ function _99.visual_prompt(opts)
   opts = process_opts(opts)
   local context = get_context("over-range-with-prompt")
   context.logger:debug("start")
+
+  -- Capture visual selection before opening float
+  set_selection_marks()
+  local range = Range.from_visual_selection()
+
   Window.capture_input({
     cb = wrap_window_capture(function(ok, o)
       if not ok then
         return
       end
       assert(o ~= nil, "if ok, then opts must exist")
-      _99.visual(context, o)
+      ops.over_range(context, range, o)
     end, context, opts),
     on_load = function()
       Extensions.setup_buffer(_99_state)
     end,
     rules = _99_state.rules,
+    selection_range = range,
   })
 end
 

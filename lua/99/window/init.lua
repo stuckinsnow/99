@@ -1,4 +1,5 @@
 local Agents = require("99.extensions.agents")
+local InlineMarks = require("99.ops.inline-marks")
 
 --- @class _99.window.Module
 --- @field active_windows _99.window.Window[]
@@ -335,6 +336,7 @@ end
 --- @field cb fun(success: boolean, result: string): nil
 --- @field on_load? fun(): nil
 --- @field rules _99.Agents.Rules
+--- @field selection_range? _99.Range
 
 --- @param opts _99.window.CaptureInputOpts
 function M.capture_input(opts)
@@ -346,6 +348,25 @@ function M.capture_input(opts)
     number = vim.wo[prev_win].number,
     relativenumber = vim.wo[prev_win].relativenumber,
   }
+
+  -- Show inline marks on the selection range if provided
+  local inline_marks_ns_id = -1
+  if opts.selection_range then
+    local start_row, _ = opts.selection_range.start:to_vim()
+    local end_row, _ = opts.selection_range.end_:to_vim()
+    inline_marks_ns_id = InlineMarks.create({
+      bufnr = opts.selection_range.buffer,
+      start_line = start_row + 1,
+      end_line = end_row + 1,
+    }, "capture_input", false)
+  end
+
+  local function cleanup_inline_marks()
+    if inline_marks_ns_id >= 0 then
+      InlineMarks.clear(inline_marks_ns_id)
+      inline_marks_ns_id = -1
+    end
+  end
   
   local config = create_centered_window()
   local win = create_floating_window(config, {
@@ -387,6 +408,7 @@ function M.capture_input(opts)
       end
       local lines = vim.api.nvim_buf_get_lines(win.buf_id, 0, -1, false)
       local result = table.concat(lines, "\n")
+      cleanup_inline_marks()
       M.clear_active_popups()
       if nvim_win_is_valid(prev_win) then
         vim.wo[prev_win].number = prev_win_opts.number
@@ -414,6 +436,7 @@ function M.capture_input(opts)
       if not nvim_win_is_valid(win.win_id) then
         return
       end
+      cleanup_inline_marks()
       M.clear_active_popups()
       if nvim_win_is_valid(prev_win) then
         vim.wo[prev_win].number = prev_win_opts.number
@@ -424,6 +447,7 @@ function M.capture_input(opts)
   })
 
   vim.keymap.set("n", "q", function()
+    cleanup_inline_marks()
     M.clear_active_popups()
     if nvim_win_is_valid(prev_win) then
       vim.wo[prev_win].number = prev_win_opts.number
