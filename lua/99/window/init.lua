@@ -341,6 +341,12 @@ function M.capture_input(opts)
   _ = opts
   M.clear_active_popups()
 
+  local prev_win = vim.api.nvim_get_current_win()
+  local prev_win_opts = {
+    number = vim.wo[prev_win].number,
+    relativenumber = vim.wo[prev_win].relativenumber,
+  }
+  
   local config = create_centered_window()
   local win = create_floating_window(config, {
     title = " 99 Prompt ",
@@ -363,6 +369,11 @@ function M.capture_input(opts)
         vim.api.nvim_set_current_win(win.win_id)
       else
         M.clear_active_popups()
+        if nvim_win_is_valid(prev_win) then
+          vim.api.nvim_set_current_win(prev_win)
+          vim.wo[prev_win].number = prev_win_opts.number
+          vim.wo[prev_win].relativenumber = prev_win_opts.relativenumber
+        end
       end
     end,
   })
@@ -377,6 +388,10 @@ function M.capture_input(opts)
       local lines = vim.api.nvim_buf_get_lines(win.buf_id, 0, -1, false)
       local result = table.concat(lines, "\n")
       M.clear_active_popups()
+      if nvim_win_is_valid(prev_win) then
+        vim.wo[prev_win].number = prev_win_opts.number
+        vim.wo[prev_win].relativenumber = prev_win_opts.relativenumber
+      end
       opts.cb(true, result)
     end,
   })
@@ -400,12 +415,20 @@ function M.capture_input(opts)
         return
       end
       M.clear_active_popups()
+      if nvim_win_is_valid(prev_win) then
+        vim.wo[prev_win].number = prev_win_opts.number
+        vim.wo[prev_win].relativenumber = prev_win_opts.relativenumber
+      end
       opts.cb(false, "")
     end,
   })
 
   vim.keymap.set("n", "q", function()
     M.clear_active_popups()
+    if nvim_win_is_valid(prev_win) then
+      vim.wo[prev_win].number = prev_win_opts.number
+      vim.wo[prev_win].relativenumber = prev_win_opts.relativenumber
+    end
     opts.cb(false, "")
   end, { buffer = win.buf_id, nowait = true })
 
