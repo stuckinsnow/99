@@ -8,4 +8,5 @@ return {
   inline_marks = require("99.ops.inline-marks"),
   diagonal_lines = require("99.ops.diagonal-lines"),
   noice_status = require("99.ops.noice-status"),
+  paint = require("99.ops.paint"),
 }

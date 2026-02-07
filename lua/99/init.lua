@@ -16,6 +16,7 @@ local InlineMarks = require("99.ops.inline-marks")
 local DiagonalLines = require("99.ops.diagonal-lines")
 local NoiceStatus = require("99.ops.noice-status")
 local Diff = require("99.ops.diff")
+local Paint = require("99.ops.paint")
 
 --- @return string
 local function get_model_cache_path()
@@ -475,6 +476,23 @@ function _99.visual(context, opts)
   context = context or get_context("over-range")
   local range = Range.from_visual_selection()
   ops.over_range(context, range, opts)
+end
+
+--- Paint (mark) a visual selection to include as context in subsequent operations
+function _99.paint()
+  set_selection_marks()
+  local range = Range.from_visual_selection()
+  Paint.add_region(range)
+end
+
+--- Clear all painted regions
+function _99.clear_paint()
+  Paint.clear()
+end
+
+--- Clear the last painted region
+function _99.clear_last_paint()
+  Paint.clear_last()
 end
 
 --- View all the logs that are currently cached.  Cached log count is determined

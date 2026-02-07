@@ -81,6 +81,31 @@ local function over_range(context, range, opts)
     context:add_agent_rules(additional_rules)
   end
 
+  -- Add painted regions FIRST so they're prominent
+  local Paint = require("99.ops.paint")
+  local all_regions = Paint.get_all_regions()
+  logger:debug("paint regions found", "count", #all_regions)
+  if #all_regions > 0 then
+    local painted_parts = {}
+    table.insert(painted_parts, "<CRITICAL_INSTRUCTION>")
+    table.insert(painted_parts, "The user has PAINTED (marked) the following code regions that you MUST reference:")
+    for i, region in ipairs(all_regions) do
+      local bufname = vim.api.nvim_buf_get_name(region.bufnr)
+      logger:debug("adding painted region", "index", i, "buffer", bufname, "lines", region.start_line .. "-" .. region.end_line)
+      table.insert(painted_parts, string.format("\n--- PAINTED CODE BLOCK %d ---", i))
+      table.insert(painted_parts, string.format("File: %s", bufname))
+      table.insert(painted_parts, string.format("Lines %d-%d:", region.start_line, region.end_line))
+      table.insert(painted_parts, table.concat(region.lines, "\n"))
+      table.insert(painted_parts, string.format("--- END PAINTED BLOCK %d ---\n", i))
+    end
+    table.insert(painted_parts, "When the user refers to 'painted code' or 'painted text', they mean the code blocks above.")
+    table.insert(painted_parts, "You MUST use these painted blocks when implementing the user's request.")
+    table.insert(painted_parts, "</CRITICAL_INSTRUCTION>\n")
+    local painted_content = table.concat(painted_parts, "\n")
+    logger:debug("painted content length", "length", #painted_content)
+    request:add_prompt_content(painted_content)
+  end
+
   request:add_prompt_content(full_prompt)
 
   -- Only start the old spinner if inline marks and diagonal lines are not enabled
