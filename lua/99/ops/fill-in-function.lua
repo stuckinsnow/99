@@ -3,6 +3,8 @@ local Point = geo.Point
 local Request = require("99.request")
 local Mark = require("99.ops.marks")
 local InlineMarks = require("99.ops.inline-marks")
+local DiagonalLines = require("99.ops.diagonal-lines")
+local NoiceStatus = require("99.ops.noice-status")
 local Diff = require("99.ops.diff")
 local editor = require("99.editor")
 local RequestStatus = require("99.ops.request_status")
@@ -101,6 +103,14 @@ local function fill_in_function(context, opts)
     end_line = func_range.end_.row,
   }, context.xid)
 
+  local diagonal_lines_ns = DiagonalLines.create({
+    bufnr = buffer,
+    start_line = func_range.start.row,
+    end_line = func_range.end_.row,
+  }, context.xid)
+
+  local noice_status_ns = NoiceStatus.create(context.xid)
+
   local request_status = RequestStatus.new(
     250,
     context._99.ai_stdout_rows,
@@ -108,8 +118,9 @@ local function fill_in_function(context, opts)
     context.marks.function_location
   )
 
-  -- Only start the old spinner if inline marks are not enabled
-  if not InlineMarks.is_enabled() then
+  -- Only start the old spinner if inline marks and diagonal lines are not enabled
+  local use_old_spinner = not InlineMarks.is_enabled() and not DiagonalLines.is_enabled()
+  if use_old_spinner then
     request_status:start()
   end
 
@@ -118,11 +129,28 @@ local function fill_in_function(context, opts)
     request:cancel()
     request_status:stop()
     InlineMarks.clear(inline_marks_ns)
+    DiagonalLines.clear(diagonal_lines_ns)
+    NoiceStatus.clear(noice_status_ns)
   end)
 
   request:start({
     on_stdout = function(line)
-      request_status:push(line)
+      -- Only update old spinner if it's being used
+      if use_old_spinner then
+        request_status:push(line)
+      end
+      -- Also update inline marks if enabled
+      if InlineMarks.is_enabled() then
+        InlineMarks.update_status(inline_marks_ns, line)
+      end
+      -- Also update diagonal lines if enabled
+      if DiagonalLines.is_enabled() then
+        DiagonalLines.update_status(diagonal_lines_ns, line)
+      end
+      -- Also update noice status if enabled
+      if NoiceStatus.is_enabled() then
+        NoiceStatus.update_status(noice_status_ns, line)
+      end
     end,
     on_complete = function(status, response)
       logger:info("on_complete", "status", status, "response", response)

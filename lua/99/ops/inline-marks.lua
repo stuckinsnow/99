@@ -11,6 +11,7 @@
 --- @field sign_hl_group string Highlight group for signs
 --- @field priority number Priority for extmarks
 --- @field spinner_interval number Milliseconds between spinner frame updates
+--- @field show_status boolean Whether to update spinner text with status info
 
 --- @class _99.InlineMarks.Context
 --- @field bufnr number
@@ -21,6 +22,7 @@
 --- @field bufnr number
 --- @field ns_id number
 --- @field spinner _99.Spinner|nil
+--- @field status_lines string[] Lines of status text to display
 
 local M = {}
 
@@ -33,6 +35,7 @@ local default_opts = {
   sign_hl_group = "Comment",
   priority = 2048,
   spinner_interval = 100,
+  show_status = true,
 }
 
 --- @type _99.InlineMarks.Opts
@@ -143,6 +146,7 @@ function M.create(context, id, show_spinner)
     bufnr = context.bufnr,
     ns_id = ns_id,
     spinner = nil,
+    status_lines = {},
   }
   active_marks[ns_id] = mark
 
@@ -153,6 +157,26 @@ function M.create(context, id, show_spinner)
   end
 
   return ns_id
+end
+
+--- Update the status text displayed in the spinner
+--- @param ns_id number
+--- @param line string
+function M.update_status(ns_id, line)
+  if ns_id < 0 then
+    return
+  end
+
+  if not current_opts.show_status then
+    return
+  end
+
+  local mark = active_marks[ns_id]
+  if mark and mark.spinner then
+    -- Strip ANSI codes and use plain text
+    local clean_line = line:gsub("\27%[[%d;]*m", "")
+    mark.spinner:update_text(clean_line)
+  end
 end
 
 --- Clear inline marks for a given namespace

@@ -2,6 +2,8 @@ local Request = require("99.request")
 local RequestStatus = require("99.ops.request_status")
 local Mark = require("99.ops.marks")
 local InlineMarks = require("99.ops.inline-marks")
+local DiagonalLines = require("99.ops.diagonal-lines")
+local NoiceStatus = require("99.ops.noice-status")
 local Diff = require("99.ops.diff")
 local geo = require("99.geo")
 local make_clean_up = require("99.ops.clean-up")
@@ -46,10 +48,20 @@ local function over_range(context, range, opts)
     end_line = range.end_.row,
   }, context.xid)
 
+  local diagonal_lines_ns = DiagonalLines.create({
+    bufnr = range.buffer,
+    start_line = range.start.row,
+    end_line = range.end_.row,
+  }, context.xid)
+
+  local noice_status_ns = NoiceStatus.create(context.xid)
+
   local clean_up = make_clean_up(context, function()
     top_status:stop()
     bottom_status:stop()
     InlineMarks.clear(inline_marks_ns)
+    DiagonalLines.clear(diagonal_lines_ns)
+    NoiceStatus.clear(noice_status_ns)
     context:clear_marks()
     request:cancel()
   end)
@@ -71,8 +83,9 @@ local function over_range(context, range, opts)
 
   request:add_prompt_content(full_prompt)
 
-  -- Only start the old spinner if inline marks are not enabled
-  if not InlineMarks.is_enabled() then
+  -- Only start the old spinner if inline marks and diagonal lines are not enabled
+  local use_old_spinner = not InlineMarks.is_enabled() and not DiagonalLines.is_enabled()
+  if use_old_spinner then
     top_status:start()
     bottom_status:start()
   end
@@ -120,8 +133,21 @@ local function over_range(context, range, opts)
       end
     end,
     on_stdout = function(line)
-      if display_ai_status then
+      -- Only update old spinner if it's being used
+      if use_old_spinner and display_ai_status then
         top_status:push(line)
+      end
+      -- Also update inline marks if enabled
+      if InlineMarks.is_enabled() then
+        InlineMarks.update_status(inline_marks_ns, line)
+      end
+      -- Also update diagonal lines if enabled
+      if DiagonalLines.is_enabled() then
+        DiagonalLines.update_status(diagonal_lines_ns, line)
+      end
+      -- Also update noice status if enabled
+      if NoiceStatus.is_enabled() then
+        NoiceStatus.update_status(noice_status_ns, line)
       end
     end,
     on_stderr = function(line)

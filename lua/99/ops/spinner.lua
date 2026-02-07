@@ -28,6 +28,7 @@ local default_opts = {
 --- @field timer uv.uv_timer_t|nil Timer used to update spinner animation
 --- @field stopped boolean Whether the spinner has been stopped
 --- @field opts _99.Spinner.Opts Configuration options for the spinner
+--- @field virt_text_segments table[]|nil Custom virtual text segments with colors
 local Spinner = {}
 Spinner.__index = Spinner
 
@@ -56,16 +57,43 @@ function Spinner.new(opts)
     current_index = 1,
     timer = vim.uv.new_timer(),
     stopped = false,
+    virt_text_segments = nil,
     opts = vim.tbl_deep_extend("force", merged_opts, { extmark = { virt_text_win_col = col } }),
   }, Spinner)
 
   return self
 end
 
+--- Updates the spinner text dynamically
+--- @param text string New text to display
+function Spinner:update_text(text)
+  self.opts.spinner_text = text
+  self.virt_text_segments = nil
+end
+
+--- Updates the spinner with colored virtual text segments
+--- @param segments table[] Array of {text, hl_group} tuples
+function Spinner:update_virt_text(segments)
+  self.virt_text_segments = segments
+end
+
 --- Gets the virtual text content for the spinner
 --- @return table[]
 function Spinner:get_virtual_text()
-  return { { self.opts.spinner_text .. " " .. self.opts.spinner_frames[self.current_index] .. " ", self.opts.hl_group } }
+  if self.virt_text_segments then
+    -- Use colored segments with spinner frame
+    local result = {}
+    -- Add spinner frame at the beginning
+    table.insert(result, {"  " .. self.opts.spinner_frames[self.current_index] .. " ", self.opts.hl_group})
+    -- Add colored text segments
+    for _, segment in ipairs(self.virt_text_segments) do
+      table.insert(result, segment)
+    end
+    return result
+  else
+    -- Use simple text with spinner frame
+    return { { self.opts.spinner_text .. " " .. self.opts.spinner_frames[self.current_index] .. " ", self.opts.hl_group } }
+  end
 end
 
 --- @return number id of the extmark

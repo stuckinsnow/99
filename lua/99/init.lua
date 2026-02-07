@@ -13,6 +13,8 @@ local Agents = require("99.extensions.agents")
 local Providers = require("99.providers")
 local time = require("99.time")
 local InlineMarks = require("99.ops.inline-marks")
+local DiagonalLines = require("99.ops.diagonal-lines")
+local NoiceStatus = require("99.ops.noice-status")
 local Diff = require("99.ops.diff")
 
 --- @return string
@@ -190,8 +192,11 @@ end
 --- @field debug_log_prefix string?
 --- @field display_errors? boolean
 --- @field auto_add_skills? boolean
+--- @field show_inline_status? boolean
 --- @field completion _99.Completion?
 --- @field inline_marks _99.InlineMarks.Opts?
+--- @field diagonal_lines _99.DiagonalLines.Opts?
+--- @field noice_status _99.NoiceStatus.Opts?
 --- @field diff _99.Diff.Opts?
 
 --- unanswered question -- will i need to queue messages one at a time or
@@ -619,7 +624,23 @@ function _99.setup(opts)
 
   -- Setup inline marks if configured
   if opts.inline_marks then
+    if opts.show_inline_status == false then
+      opts.inline_marks.show_status = false
+    end
     InlineMarks.setup(opts.inline_marks)
+  end
+
+  -- Setup diagonal lines if configured
+  if opts.diagonal_lines then
+    if opts.show_inline_status == false then
+      opts.diagonal_lines.show_status = false
+    end
+    DiagonalLines.setup(opts.diagonal_lines)
+  end
+
+  -- Setup noice status if configured
+  if opts.noice_status then
+    NoiceStatus.setup(opts.noice_status)
   end
 
   -- Setup diff if configured
