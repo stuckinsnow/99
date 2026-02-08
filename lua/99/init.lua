@@ -356,7 +356,8 @@ end
 --- @param cb fun(context: _99.RequestContext, o: _99.ops.Opts?): nil
 --- @param context _99.RequestContext
 --- @param opts _99.ops.Opts
-local function capture_prompt(cb, context, opts)
+--- @param selection_range _99.geo.Range?
+local function capture_prompt(cb, context, opts, selection_range)
   Window.capture_input({
     --- @param ok boolean
     --- @param response string
@@ -383,6 +384,7 @@ local function capture_prompt(cb, context, opts)
       Extensions.setup_buffer(_99_state)
     end,
     rules = _99_state.rules,
+    selection_range = selection_range,
   })
 end
 
@@ -455,15 +457,15 @@ end
 function _99.visual(opts)
   opts = process_opts(opts)
   local context = get_context("visual")
+  set_selection_marks()
+  local range = Range.from_visual_selection()
   local function perform_range(ctx, o)
-    set_selection_marks()
-    local range = Range.from_visual_selection()
     ops.over_range(ctx, range, o)
   end
   if opts.additional_prompt then
     perform_range(context, opts)
   else
-    capture_prompt(perform_range, context, opts)
+    capture_prompt(perform_range, context, opts, range)
   end
 end
 
