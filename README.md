@@ -1,10 +1,14 @@
-# IF YOU ARE HERE FROM THE YT VIDEO
+# IF YOU ARE HERE FROM [THE YT VIDEO](https://www.youtube.com/watch?v=ws9zR-UzwTE)
 a few things changed.  completion is a bit different for skills.  i now require `@` to begin with
 ... ill try to update as it happens ...
 
-### The Great Twitch Discussion
-I will conduct a stream on Jan 30 at 8am The Lords Time (Montana Time/Mountain Time (same thing))
-we will do an extensive deep dive on 99 and what we think is good and bad.
+# WARNING :: API CHANGES RIGHT NOW
+It will happen that apis will disapear or be changed.  Sorry, this is an ALPHA product.
+
+# API
+* visual
+* search (upcoming, not ready yet)
+* debug (planned)
 
 ## The AI Agent That Neovim Deserves
 This is an example repo where i want to test what i think the ideal AI workflow
@@ -84,10 +88,6 @@ I make the assumption you are using Lazy
 				},
 			})
 
-            -- Create your own short cuts for the different types of actions
-			vim.keymap.set("n", "<leader>9f", function()
-				_99.fill_in_function()
-			end)
             -- take extra note that i have visual selection only in v mode
             -- technically whatever your last visual selection is, will be used
             -- so i have this set to visual mode so i dont screw up and use an
@@ -102,14 +102,6 @@ I make the assumption you are using Lazy
             --- if you have a request you dont want to make any changes, just cancel it
 			vim.keymap.set("v", "<leader>9s", function()
 				_99.stop_all_requests()
-			end)
-
-            --- Example: Using rules + actions for custom behaviors
-            --- Create a rule file like ~/.rules/debug.md that defines custom behavior.
-            --- For instance, a "debug" rule could automatically add printf statements
-            --- throughout a function to help debug its execution flow.
-			vim.keymap.set("n", "<leader>9fd", function()
-				_99.fill_in_function()
 			end)
 		end,
 	},
@@ -164,12 +156,6 @@ Then the virtual text will be displayed one line below "function" instead of fir
 
 * visual selection sends the whole file.  there is likely a better way to use
   treesitter to make the selection of the content being sent more sensible.
-
-* for both fill in function and visual there should be a better way to gather
-context.  I think that treesitter + lsp could be really powerful.  I am going
-to experiment with this more once i get access to the FIM models.  This could
-make the time to completion less than a couple seconds, which would be
-incredible
 
 * every now and then the replacement seems to get jacked up and it screws up
 what i am currently editing..  I think it may have something to do with auto-complete

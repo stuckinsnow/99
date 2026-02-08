@@ -24,4 +24,26 @@ describe("request_status", function()
 
     eq({ "⠙ TITLE", "bar", "baz" }, status:get())
   end)
+  it("using callback function", function()
+    local calls = {}
+    local status = RequestStatus.new(100, 3, "TITLE", function(status_lines)
+      table.insert(calls, status_lines)
+    end)
+    status:start()
+
+    vim.wait(200, function()
+      return #calls == 1
+    end)
+    eq(1, #calls)
+    eq({ "⠹ TITLE" }, calls[1])
+    calls = {}
+
+    status:push("bar")
+
+    vim.wait(200, function()
+      return #calls == 1
+    end)
+    eq(1, #calls)
+    eq({ "⠸ TITLE", "bar" }, calls[1])
+  end)
 end)

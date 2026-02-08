@@ -340,7 +340,6 @@ end
 
 --- @param opts _99.window.CaptureInputOpts
 function M.capture_input(opts)
-  _ = opts
   M.clear_active_popups()
 
   local prev_win = vim.api.nvim_get_current_win()

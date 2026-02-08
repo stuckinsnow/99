@@ -33,23 +33,28 @@ end
 --- @field lines string[]
 --- @field max_lines number
 --- @field running boolean
---- @field mark _99.Mark
+--- @field mark? _99.Mark
+--- @field callback? fun(status: string[]): nil
 local RequestStatus = {}
 RequestStatus.__index = RequestStatus
 
 --- @param update_time number
 --- @param max_lines number
 --- @param title_line string
---- @param mark _99.Mark
+--- @param mark_or_fn _99.Mark | fun(status: string[]): nil
 --- @return _99.RequestStatus
-function RequestStatus.new(update_time, max_lines, title_line, mark)
+function RequestStatus.new(update_time, max_lines, title_line, mark_or_fn)
   local self = setmetatable({}, RequestStatus)
   self.update_time = update_time
   self.max_lines = max_lines
   self.status_line = StatusLine.new(title_line)
   self.lines = {}
   self.running = false
-  self.mark = mark
+  if type(mark_or_fn) == "function" then
+    self.callback = mark_or_fn
+  else
+    self.mark = mark_or_fn
+  end
   return self
 end
 
@@ -77,7 +82,12 @@ function RequestStatus:start()
     end
 
     self.status_line:update()
-    self.mark:set_virtual_text(self:get())
+    if self.mark then
+      self.mark:set_virtual_text(self:get())
+    end
+    if self.callback then
+      self.callback(self:get())
+    end
     vim.defer_fn(update_spinner, self.update_time)
   end
 

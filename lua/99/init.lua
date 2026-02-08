@@ -353,26 +353,37 @@ local function set_selection_marks()
   )
 end
 
---- @param cb fun(ok: boolean, o: _99.ops.Opts?): nil
+--- @param cb fun(context: _99.RequestContext, o: _99.ops.Opts?): nil
 --- @param context _99.RequestContext
 --- @param opts _99.ops.Opts
---- @return fun(ok: boolean, response: string): nil
-local function wrap_window_capture(cb, context, opts)
-  --- @param ok boolean
-  --- @param response string
-  return function(ok, response)
-    context.logger:debug("capture_prompt", "success", ok, "response", response)
-    if not ok then
-      return cb(false)
-    end
-    local rules_and_names = Agents.by_name(_99_state.rules, response)
-    opts.additional_rules = opts.additional_rules or {}
-    for _, r in ipairs(rules_and_names.rules) do
-      table.insert(opts.additional_rules, r)
-    end
-    opts.additional_prompt = response
-    cb(true, opts)
-  end
+local function capture_prompt(cb, context, opts)
+  Window.capture_input({
+    --- @param ok boolean
+    --- @param response string
+    cb = function(ok, response)
+      context.logger:debug(
+        "capture_prompt",
+        "success",
+        ok,
+        "response",
+        response
+      )
+      if not ok then
+        return
+      end
+      local rules_and_names = Agents.by_name(_99_state.rules, response)
+      opts.additional_rules = opts.additional_rules or {}
+      for _, r in ipairs(rules_and_names.rules) do
+        table.insert(opts.additional_rules, r)
+      end
+      opts.additional_prompt = response
+      cb(context, opts)
+    end,
+    on_load = function()
+      Extensions.setup_buffer(_99_state)
+    end,
+    rules = _99_state.rules,
+  })
 end
 
 --- @param operation_name string
@@ -410,72 +421,50 @@ function _99:rule_from_path(path)
   return Agents.get_rule_by_path(_99_state.rules, path)
 end
 
---- @param opts? _99.ops.Opts
-function _99.fill_in_function_prompt(opts)
-  opts = process_opts(opts)
-  local context = get_context("fill-in-function-with-prompt")
-
-  context.logger:debug("start")
-  Window.capture_input({
-    cb = wrap_window_capture(function(ok, o)
-      if not ok then
-        return
-      end
-      assert(o ~= nil, "if ok, then opts must exist")
-      ops.fill_in_function(context, o)
-    end, context, opts),
-    on_load = function()
-      Extensions.setup_buffer(_99_state)
-    end,
-    rules = _99_state.rules,
-  })
-end
-
---- @param opts? _99.ops.Opts
-function _99.fill_in_function(opts)
-  opts = process_opts(opts)
-  ops.fill_in_function(get_context("fill_in_function"), opts)
+--- @param opts? _99.ops.SearchOpts
+function _99.search(opts)
+  local o = process_opts(opts) --[[ @as _99.ops.SearchOpts ]]
+  local context = get_context("search")
+  if o.additional_prompt then
+    ops.search(context, o)
+    return
+  else
+    capture_prompt(ops.search, context, o)
+  end
 end
 
 --- @param opts _99.ops.Opts
 function _99.visual_prompt(opts)
-  opts = process_opts(opts)
-  local context = get_context("over-range-with-prompt")
-  context.logger:debug("start")
-
-  -- Capture visual selection before opening float
-  set_selection_marks()
-  local range = Range.from_visual_selection()
-
-  Window.capture_input({
-    cb = wrap_window_capture(function(ok, o)
-      if not ok then
-        return
-      end
-      assert(o ~= nil, "if ok, then opts must exist")
-      ops.over_range(context, range, o)
-    end, context, opts),
-    on_load = function()
-      Extensions.setup_buffer(_99_state)
-    end,
-    rules = _99_state.rules,
-    selection_range = range,
-  })
+  vim.notify("use visual, visual_prompt has been deprecated", vim.log.levels.WARN)
+  _99.visual(opts)
 end
 
---- @param context _99.RequestContext?
---- @param opts _99.ops.Opts?
-function _99.visual(context, opts)
-  opts = process_opts(opts)
-  --- TODO: Talk to teej about this.
-  --- Visual selection marks are only set in place post visual selection.
-  --- that means for this function to work i must escape out of visual mode
-  --- which i dislike very much.  because maybe you dont want this
-  set_selection_marks()
+function _99.fill_in_function()
+  error(
+    "function has been removed. Just use visual. I really hate fill in function, sorry :)"
+  )
+end
 
-  context = context or get_context("over-range")
-  local range = Range.from_visual_selection()
-  ops.over_range(context, range, opts)
+function _99.fill_in_function_prompt()
+  error(
+    "function has been removed. Just use visual. I really hate fill in function, sorry :)"
+  )
+end
+
+--- @param opts _99.ops.Opts?
+function _99.visual(opts)
+  opts = process_opts(opts)
+  local context = get_context("visual")
+  local function perform_range(ctx, o)
+    set_selection_marks()
+    local range = Range.from_visual_selection()
+    ops.over_range(ctx, range, o)
+  end
+  if opts.additional_prompt then
+    perform_range(context, opts)
+  else
+    capture_prompt(perform_range, context, opts)
+  end
 end
 
 --- Paint (mark) a visual selection to include as context in subsequent operations
