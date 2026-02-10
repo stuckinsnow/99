@@ -1,28 +1,10 @@
 local Agents = require("99.extensions.agents")
-local Helpers = require("99.extensions.agents.helpers")
+local Files = require("99.extensions.files")
+local Completions = require("99.extensions.completions")
 local SOURCE = "99"
-
---- @class _99.Extensions.CmpItem
---- @field rule _99.Agents.Rule
---- @field docs string
-
---- @param _99 _99.State
---- @return _99.Extensions.CmpItem[]
-local function rules(_99)
-  local agent_rules = Agents.rules_to_items(_99.rules)
-  local out = {}
-  for _, rule in ipairs(agent_rules) do
-    table.insert(out, {
-      rule = rule,
-      docs = Helpers.head(rule.path),
-    })
-  end
-  return out
-end
 
 --- @class CmpSource
 --- @field _99 _99.State
---- @field items _99.Extensions.CmpItem[]
 local CmpSource = {}
 CmpSource.__index = CmpSource
 
@@ -30,7 +12,6 @@ CmpSource.__index = CmpSource
 function CmpSource.new(_99)
   return setmetatable({
     _99 = _99,
-    items = rules(_99),
   }, CmpSource)
 end
 
@@ -43,44 +24,41 @@ function CmpSource.get_debug_name()
 end
 
 function CmpSource.get_keyword_pattern()
-  return [[@\k\+]]
+  return Completions.get_keyword_pattern()
 end
 
 function CmpSource.get_trigger_characters()
-  return { "@" }
+  return Completions.get_trigger_characters()
 end
 
---- @class CompletionItem
---- @field label string
---- @field kind number kind is optional but gives icons / categories
---- @field documentation string can be a string or markdown table
---- @field detail string detail shows a right-side hint
+function CmpSource.complete(_, params, callback)
+  local before = params.context.cursor_before_line or ""
 
---- @class Completion
---- @field items CompletionItem[]
---- @field isIncomplete boolean -
--- true: I might return more if user types more
--- false: this result set is complete
-function CmpSource:complete(_, callback)
-  local items = {} --[[ @as CompletionItem[] ]]
-  for _, item in ipairs(self.items) do
-    table.insert(items, {
-      label = item.rule.name,
-      insertText = "@" .. item.rule.name,
-      filterText = "@" .. item.rule.name,
-      kind = 17, -- file
-      documentation = {
-        kind = "markdown",
-        value = item.docs,
-      },
-      detail = item.rule.path,
-    })
+  -- Find which trigger is active
+  local trigger = nil
+  for _, char in ipairs(Completions.get_trigger_characters()) do
+    local pattern = char:gsub("([%%%^%$%(%)%.%[%]%*%+%-%?])", "%%%1") .. "%S*$"
+    if before:match(pattern) then
+      trigger = char
+      break
+    end
   end
 
-  callback({
-    items = items,
-    isIncomplete = false,
-  })
+  if not trigger then
+    callback({ items = {}, isIncomplete = false })
+    return
+  end
+
+  local items = Completions.get_completions(trigger)
+  callback({ items = items, isIncomplete = false })
+end
+
+function CmpSource.resolve(_, completion_item, callback)
+  callback(completion_item)
+end
+
+function CmpSource.execute(_, completion_item, callback)
+  callback(completion_item)
 end
 
 --- @type CmpSource | nil
@@ -88,20 +66,25 @@ local source = nil
 
 --- @param _ _99.State
 local function init_for_buffer(_)
+  local buf = vim.api.nvim_get_current_buf()
+
+  -- Set filetype for syntax highlighting
+  vim.bo[buf].filetype = "99prompt"
+
   local cmp = require("cmp")
   cmp.setup.buffer({
-    sources = {
-      { name = SOURCE },
-    },
+    sources = { { name = SOURCE } },
     window = {
-      completion = {
-        zindex = 1001,
-      },
-      documentation = {
-        zindex = 1001,
-      },
+      completion = { zindex = 1001 },
+      documentation = { zindex = 1001 },
     },
   })
+end
+
+--- @param _99 _99.State
+local function register_providers(_99)
+  Completions.register(Agents.completion_provider(_99))
+  Completions.register(Files.completion_provider())
 end
 
 --- @param _99 _99.State
@@ -110,6 +93,24 @@ local function init(_99)
     source == nil,
     "the source must be nil when calling init on an completer"
   )
+
+  -- Collect rule directories to exclude from file search
+  local rule_dirs = {}
+  if _99.completion then
+    if _99.completion.custom_rules then
+      for _, dir in ipairs(_99.completion.custom_rules) do
+        table.insert(rule_dirs, dir)
+      end
+    end
+  end
+
+  if _99.completion and _99.completion.files then
+    Files.setup(_99.completion.files, rule_dirs)
+  else
+    Files.setup({ enabled = true }, rule_dirs)
+  end
+
+  register_providers(_99)
 
   local cmp = require("cmp")
   source = CmpSource.new(_99)
@@ -121,7 +122,7 @@ local function refresh_state(_99)
   if not source then
     return
   end
-  source.items = rules(_99)
+  register_providers(_99)
 end
 
 --- @type _99.Extensions.Source

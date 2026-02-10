@@ -12,6 +12,7 @@ local Extensions = require("99.extensions")
 local Agents = require("99.extensions.agents")
 local Providers = require("99.providers")
 local time = require("99.time")
+local Throbber = require("99.ops.throbber")
 local InlineMarks = require("99.ops.inline-marks")
 local DiagonalLines = require("99.ops.diagonal-lines")
 local NoiceStatus = require("99.ops.noice-status")
@@ -148,12 +149,14 @@ end
 --- @class _99.ActiveRequest
 --- @field clean_up _99.Cleanup
 --- @field request_id number
+--- @field name string
 
 --- @class _99.StateProps
 --- @field model string
 --- @field md_files string[]
 --- @field prompts _99.Prompts
 --- @field ai_stdout_rows number
+--- @field show_in_flight_requests boolean
 --- @field languages string[]
 --- @field display_errors boolean
 --- @field auto_add_skills boolean
@@ -170,6 +173,7 @@ local function create_99_state()
     md_files = {},
     prompts = require("99.prompt-settings"),
     ai_stdout_rows = 3,
+    show_in_flight_requests = false,
     languages = { "lua", "go", "java", "elixir", "cpp", "ruby" },
     display_errors = false,
     provider_override = nil,
@@ -184,10 +188,12 @@ end
 --- @class _99.Completion
 --- @field source "cmp" | "blink" | nil
 --- @field custom_rules string[]
+--- @field files _99.Files.Config?
 
 --- @class _99.Options
 --- @field logger _99.Logger.Options?
 --- @field model string?
+--- @field show_in_flight_requests boolean?
 --- @field md_files string[]?
 --- @field provider _99.Providers.BaseProvider?
 --- @field debug_log_prefix string?
@@ -210,6 +216,9 @@ end
 --- @field ai_stdout_rows number
 --- @field languages string[]
 --- @field display_errors boolean
+--- @field show_in_flight_requests boolean
+--- @field show_in_flight_requests_window _99.window.Window | nil
+--- @field show_in_flight_requests_throbber _99.Throbber | nil
 --- @field provider_override _99.Providers.BaseProvider?
 --- @field auto_add_skills boolean
 --- @field rules _99.Agents.Rules
@@ -217,6 +226,7 @@ end
 --- @field __view_log_idx number
 --- @field __request_history _99.RequestEntry[]
 --- @field __request_by_id table<number, _99.RequestEntry>
+--- @field __active_marks _99.Mark[]
 local _99_State = {}
 _99_State.__index = _99_State
 
@@ -305,15 +315,22 @@ end
 local _active_request_id = 0
 ---@param clean_up _99.Cleanup
 ---@param request_id number
+---@param name string
 ---@return number
-function _99_State:add_active_request(clean_up, request_id)
+function _99_State:add_active_request(clean_up, request_id, name)
   _active_request_id = _active_request_id + 1
   Logger:debug("adding active request", "id", _active_request_id)
   self.__active_requests[_active_request_id] = {
     clean_up = clean_up,
     request_id = request_id,
+    name = name,
   }
   return _active_request_id
+end
+
+--- @param mark _99.Mark
+function _99_State:add_mark(mark)
+  table.insert(self.__active_marks, mark)
 end
 
 function _99_State:active_request_count()
@@ -354,11 +371,12 @@ local function set_selection_marks()
 end
 
 --- @param cb fun(context: _99.RequestContext, o: _99.ops.Opts?): nil
+--- @param name string
 --- @param context _99.RequestContext
 --- @param opts _99.ops.Opts
 --- @param selection_range _99.geo.Range?
-local function capture_prompt(cb, context, opts, selection_range)
-  Window.capture_input({
+local function capture_prompt(cb, name, context, opts, selection_range)
+  Window.capture_input(name, {
     --- @param ok boolean
     --- @param response string
     cb = function(ok, response)
@@ -431,13 +449,16 @@ function _99.search(opts)
     ops.search(context, o)
     return
   else
-    capture_prompt(ops.search, context, o)
+    capture_prompt(ops.search, "Search", context, o)
   end
 end
 
 --- @param opts _99.ops.Opts
 function _99.visual_prompt(opts)
-  vim.notify("use visual, visual_prompt has been deprecated", vim.log.levels.WARN)
+  vim.notify(
+    "use visual, visual_prompt has been deprecated",
+    vim.log.levels.WARN
+  )
   _99.visual(opts)
 end
 
@@ -465,7 +486,7 @@ function _99.visual(opts)
   if opts.additional_prompt then
     perform_range(context, opts)
   else
-    capture_prompt(perform_range, context, opts, range)
+    capture_prompt(perform_range, "Visual", context, opts, range)
   end
 end
 
@@ -526,6 +547,13 @@ function _99.stop_all_requests()
   _99_state.__active_requests = {}
 end
 
+function _99.clear_all_marks()
+  for _, mark in ipairs(_99_state.__active_marks or {}) do
+    mark:delete()
+  end
+  _99_state.__active_marks = {}
+end
+
 function _99.previous_requests_to_qfix()
   local items = {}
   for _, entry in ipairs(_99_state.__request_history) do
@@ -548,6 +576,60 @@ end
 --- @return _99.State
 function _99.__get_state()
   return _99_state
+end
+
+local function shut_down_in_flight_requests_window()
+  if _99_state.show_in_flight_requests_throbber then
+    _99_state.show_in_flight_requests_throbber:stop()
+  end
+
+  local win = _99_state.show_in_flight_requests_window
+  if win ~= nil then
+    Window.close(win)
+  end
+  _99_state.show_in_flight_requests_window = nil
+  _99_state.show_in_flight_requests_throbber = nil
+end
+
+local function show_in_flight_requests()
+  if _99_state.show_in_flight_requests == false then
+    return
+  end
+  vim.defer_fn(show_in_flight_requests, 1000)
+
+  Window.refresh_active_windows()
+  local current_win = _99_state.show_in_flight_requests_window
+  if current_win ~= nil and not Window.is_active_window(current_win) then
+    shut_down_in_flight_requests_window()
+  end
+
+  if Window.has_active_windows() or _99_state:active_request_count() == 0 then
+    return
+  end
+
+  if _99_state.show_in_flight_requests_window == nil then
+    local win = Window.status_window()
+    local throb = Throbber.new(function(throb)
+      local count = _99_state:active_request_count()
+      if count == 0 or not Window.valid(win) then
+        return shut_down_in_flight_requests_window()
+      end
+
+      local lines = {
+        throb .. " requests(" .. tostring(count) .. ") " .. throb,
+      }
+      for _, r in pairs(_99_state.__active_requests) do
+        table.insert(lines, r.name)
+      end
+
+      Window.resize(win, #lines[1], #lines)
+      vim.api.nvim_buf_set_lines(win.buf_id, 0, 1, false, lines)
+    end)
+    _99_state.show_in_flight_requests_window = win
+    _99_state.show_in_flight_requests_throbber = throb
+
+    throb:start()
+  end
 end
 
 --- @param opts _99.Options?
@@ -575,6 +657,7 @@ function _99.setup(opts)
     _99_state.provider_override = opts.provider
   end
 
+  _99_state.show_in_flight_requests = opts.show_in_flight_requests or false
   _99_state.completion = opts.completion
     or {
       source = nil,
@@ -582,6 +665,7 @@ function _99.setup(opts)
     }
   _99_state.completion.custom_rules = _99_state.completion.custom_rules or {}
   _99_state.auto_add_skills = opts.auto_add_skills or false
+  _99_state.completion.files = _99_state.completion.files or {}
 
   local crules = _99_state.completion.custom_rules
   for i, rule in ipairs(crules) do
@@ -630,6 +714,7 @@ function _99.setup(opts)
   _99_state:refresh_rules()
   Languages.initialize(_99_state)
   Extensions.init(_99_state)
+  Extensions.capture_project_root()
 
   -- Setup inline marks if configured
   if opts.inline_marks then
@@ -655,6 +740,10 @@ function _99.setup(opts)
   -- Setup diff if configured
   if opts.diff then
     Diff.setup(opts.diff)
+  end
+
+  if _99_state.show_in_flight_requests then
+    show_in_flight_requests()
   end
 end
 
@@ -888,5 +977,4 @@ function _99.__debug()
 end
 
 _99.Providers = Providers
-
 return _99

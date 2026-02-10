@@ -1,3 +1,5 @@
+--- TODO: I need to refactor a lot of this file
+--- it really sucks
 local Agents = require("99.extensions.agents")
 local InlineMarks = require("99.ops.inline-marks")
 
@@ -8,6 +10,7 @@ local M = {
 }
 local nsid = vim.api.nvim_create_namespace("99.window.error")
 local nvim_win_is_valid = vim.api.nvim_win_is_valid
+local nvim_buf_is_valid = vim.api.nvim_buf_is_valid
 
 --- @class _99.window.Config
 --- @field width number
@@ -15,6 +18,10 @@ local nvim_win_is_valid = vim.api.nvim_win_is_valid
 --- @field row number?
 --- @field col number?
 --- @field anchor string?
+--- @field border nil | string | string[]
+--- @field zindex number?
+--- @field relative string?
+--- @field title string
 
 --- @class _99.window.Window
 --- @field config _99.window.Config
@@ -48,16 +55,23 @@ local function create_window_top_config()
     width = width - 2,
     height = 3,
     anchor = "NE",
+    border = "rounded",
   }
 end
 
+--- @param zindex number
+--- @param title string
 --- @return _99.window.Config
-local function create_window_top_left_config()
+local function create_transparent_top_right_config(zindex, title)
   local width, _ = get_ui_dimensions()
   return {
     width = math.floor(width / 3),
     height = 3,
+    col = width,
     anchor = "NE",
+    border = nil,
+    zindex = zindex,
+    title = title,
   }
 end
 
@@ -68,6 +82,7 @@ local function create_window_full_screen()
     width = width - 2,
     height = height - 2,
     anchor = "NE",
+    border = "rounded",
   }
 end
 
@@ -97,31 +112,36 @@ local function create_centered_window()
     height = win_height,
     row = math.floor((height - win_height) / 2),
     col = math.floor((width - win_width) / 2),
+    border = "rounded",
   }
 end
 
 --- @param config _99.window.Config
----@diagnostic disable-next-line: undefined-doc-name
---- @param win_config vim.api.keyset.win_config
---- @return _99.window.Window
-local function create_floating_window(config, win_config)
-  local buf_id = vim.api.nvim_create_buf(false, true)
-  local win_id = vim.api.nvim_open_win(buf_id, true, {
-    relative = "editor",
+--- @param title string?
+local function full_config(config, title)
+  return {
+    relative = config.relative or "editor",
     width = config.width,
     height = config.height,
     row = config.row or 0,
     col = config.col or 0,
     anchor = config.anchor,
     style = "minimal",
-    ---@diagnostic disable-next-line: undefined-field
-    border = win_config.border,
-    ---@diagnostic disable-next-line: undefined-field
-    title = win_config.title,
+    border = config.border,
+    title = title or config.title,
     title_pos = "center",
-    ---@diagnostic disable-next-line: undefined-field
-    zindex = win_config.zindex,
-  })
+    zindex = config.zindex or 1,
+  }
+end
+
+--- @param config _99.window.Config
+--- @param title string
+--- @param enter boolean
+--- @return _99.window.Window
+local function create_floating_window(config, title, enter)
+  local buf_id = vim.api.nvim_create_buf(false, true)
+  local win_id =
+    vim.api.nvim_open_win(buf_id, enter, full_config(config, title))
   local window = {
     config = config,
     win_id = win_id,
@@ -157,10 +177,8 @@ end
 --- @param error_text string
 --- @return _99.window.Window
 function M.display_error(error_text)
-  local window = create_floating_window(create_window_top_config(), {
-    title = " 99 Error ",
-    border = "rounded",
-  })
+  local window =
+    create_floating_window(create_window_top_config(), " 99 Error ", false)
   local lines = vim.split(error_text, "\n")
 
   table.insert(lines, 1, "")
@@ -180,18 +198,21 @@ local function window_close(window)
   if nvim_win_is_valid(window.win_id) then
     vim.api.nvim_win_close(window.win_id, true)
   end
-  if vim.api.nvim_buf_is_valid(window.buf_id) then
+  if nvim_buf_is_valid(window.buf_id) then
     vim.api.nvim_buf_delete(window.buf_id, { force = true })
   end
 end
 
+--- @param window _99.window.Window
+--- @return boolean
+function M.valid(window)
+  return nvim_win_is_valid(window.win_id) and nvim_buf_is_valid(window.buf_id)
+end
+
 --- @param text string
 function M.display_cancellation_message(text)
-  local config = create_window_top_left_config()
-  local window = create_floating_window(config, {
-    title = " 99 Cancelled ",
-    border = "rounded",
-  })
+  local config = create_transparent_top_right_config(100, " 99 Cancelled ")
+  local window = create_floating_window(config, " 99 Cancelled ", false)
   local lines = vim.split(text, "\n")
 
   vim.api.nvim_buf_set_lines(window.buf_id, 0, -1, false, lines)
@@ -220,10 +241,8 @@ function M.display_full_screen_message(lines)
   --- but i just want this to work and then later... ohh much later, ill fix
   --- this basic nonsense
   M.clear_active_popups()
-  local window = create_floating_window(create_window_full_screen(), {
-    title = " 99 ",
-    border = "rounded",
-  })
+  local window =
+    create_floating_window(create_window_full_screen(), " 99 ", true)
   local display_lines = ensure_no_new_lines(lines)
   vim.api.nvim_buf_set_lines(window.buf_id, 0, -1, false, display_lines)
 end
@@ -233,10 +252,7 @@ end
 function M.create_centered_window()
   M.clear_active_popups()
   local config = create_centered_window()
-  local window = create_floating_window(config, {
-    title = " 99 ",
-    border = "rounded",
-  })
+  local window = create_floating_window(config, " 99 ", true)
   return window, config
 end
 
@@ -244,10 +260,7 @@ end
 function M.display_centered_message(message)
   M.clear_active_popups()
   local config = create_centered_window()
-  local window = create_floating_window(config, {
-    title = " 99 ",
-    border = "rounded",
-  })
+  local window = create_floating_window(config, " 99 ", true)
   local display_lines = ensure_no_new_lines(message)
 
   vim.api.nvim_buf_set_lines(window.buf_id, 0, -1, false, display_lines)
@@ -338,8 +351,9 @@ end
 --- @field rules _99.Agents.Rules
 --- @field selection_range? _99.Range
 
+--- @param name string
 --- @param opts _99.window.CaptureInputOpts
-function M.capture_input(opts)
+function M.capture_input(name, opts)
   M.clear_active_popups()
 
   local prev_win = vim.api.nvim_get_current_win()
@@ -368,10 +382,8 @@ function M.capture_input(opts)
   end
   
   local config = create_centered_window()
-  local win = create_floating_window(config, {
-    title = " 99 Prompt ",
-    border = "rounded",
-  })
+  local win =
+    create_floating_window(config, string.format(" 99 %s ", name), true)
   set_defaul_win_options(win, "99-prompt")
   vim.api.nvim_set_current_win(win.win_id)
 
@@ -467,8 +479,65 @@ function M.clear_active_popups()
   M.active_windows = {}
 end
 
+--- @return _99.window.Window
 function M.status_window()
   M.clear_active_popups()
+  local config = create_transparent_top_right_config(100, " 99 - Status ")
+  local window = create_floating_window(config, " 99 - Status ", false)
+  return window
 end
 
+--- @param win _99.window.Window
+--- @param width number
+--- @param height number
+function M.resize(win, width, height)
+  if win.config.height == height then
+    return
+  end
+  assert(M.is_active_window(win), "you cannot pass in an inactive window")
+  win.config.height = height
+  win.config.width = width
+  vim.api.nvim_win_set_config(win.win_id, full_config(win.config))
+end
+
+--- @return boolean
+function M.has_active_windows()
+  return #M.active_windows > 0
+end
+
+function M.refresh_active_windows()
+  --- @type _99.window.Window[]
+  local actives = {}
+  for _, w in ipairs(M.active_windows) do
+    if M.valid(w) then
+      table.insert(actives, w)
+    end
+  end
+  M.active_windows = actives
+end
+
+--- @param win _99.window.Window
+--- @return boolean
+function M.is_active_window(win)
+  for _, active_win in ipairs(M.active_windows) do
+    if active_win.win_id == win.win_id then
+      return true
+    end
+  end
+  return false
+end
+
+--- @param win _99.window.Window
+function M.close(win)
+  if not M.valid(win) then
+    return
+  end
+  window_close(win)
+  for i, active_win in ipairs(M.active_windows) do
+    if active_win.win_id == win.win_id then
+      table.remove(M.active_windows, i)
+      break
+    end
+  end
+end
 return M

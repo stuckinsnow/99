@@ -5,6 +5,9 @@ a few things changed.  completion is a bit different for skills.  i now require 
 # WARNING :: API CHANGES RIGHT NOW
 It will happen that apis will disapear or be changed.  Sorry, this is an ALPHA product.
 
+# 99
+The AI client that Neovim deserves, built by those that still enjoy to code.
+
 # API
 * visual
 * search (upcoming, not ready yet)
@@ -23,7 +26,7 @@ is for people who dont have "skill issues." This is meant to streamline the requ
 
 ## How to use
 
-**you must have opencode installed and setup**
+**you must have a supported AI CLI installed (opencode, claude, or cursor-agent — see [Providers](#providers) below)**
 
 Add the following configuration to your neovim config
 
@@ -41,15 +44,15 @@ I make the assumption you are using Lazy
             local cwd = vim.uv.cwd()
             local basename = vim.fs.basename(cwd)
 			_99.setup({
+                -- provider = _99.ClaudeCodeProvider,  -- default: OpenCodeProvider
 				logger = {
 					level = _99.DEBUG,
 					path = "/tmp/" .. basename .. ".99.debug",
 					print_on_error = true,
 				},
 
-                --- A new feature that is centered around tags
+                --- Completions: #rules and @files in the prompt buffer
                 completion = {
-                    --- Defaults to .cursor/rules
                     -- I am going to disable these until i understand the
                     -- problem better.  Inside of cursor rules there is also
                     -- application rules, which means i need to apply these
@@ -70,6 +73,14 @@ I make the assumption you are using Lazy
                     ---
                     custom_rules = {
                       "scratch/custom_rules/",
+                    },
+
+                    --- Configure @file completion (all fields optional, sensible defaults)
+                    files = {
+                        -- enabled = true,
+                        -- max_file_size = 102400,     -- bytes, skip files larger than this
+                        -- max_files = 5000,            -- cap on total discovered files
+                        -- exclude = { ".env", ".env.*", "node_modules", ".git", ... },
                     },
 
                     --- What autocomplete do you use.  Supports "cmp" (nvim-cmp) or "blink" (blink.cmp)
@@ -110,16 +121,35 @@ I make the assumption you are using Lazy
 	},
 ```
 
-## Completion
-
-When prompting, if you have cmp installed as your autocomplete you can use an autocomplete for rule inclusion in your prompt.
+## Completions
+When prompting, you can reference rules and files to add context to your request.
 
 Both nvim-cmp and blink.cmp are supported:
 
 - **nvim-cmp**: Set `source = "cmp"` in your config
 - **blink.cmp**: Set `source = "blink"` and ensure you have [blink.compat](https://github.com/saghen/blink.compat) installed
 
-How skill completion and inclusion works is that you start by typing `@`.
+- `#` references rules — type `#` in the prompt to autocomplete rule files from your configured rule directories
+- `@` references files — type `@` to fuzzy-search project files
+
+Referenced content is automatically resolved and injected into the AI context. Requires cmp (`source = "cmp"` in your completion config).
+
+## Providers
+99 supports multiple AI CLI backends. Set `provider` in your setup to switch. If you don't set `model`, the provider's default is used.
+
+| Provider | CLI tool | Default model |
+|---|---|---|
+| `OpenCodeProvider` (default) | `opencode` | `opencode/claude-sonnet-4-5` |
+| `ClaudeCodeProvider` | `claude` | `claude-sonnet-4-5` |
+| `CursorAgentProvider` | `cursor-agent` | `sonnet-4.5` |
+
+```lua
+_99.setup({
+    provider = _99.ClaudeCodeProvider,
+    -- model is optional, overrides the provider's default
+    model = "claude-sonnet-4-5",
+})
+```
 
 ## API
 

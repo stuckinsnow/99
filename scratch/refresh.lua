@@ -11,7 +11,7 @@ _99.setup({
   },
 })
 
-Window.capture_input({
+Window.capture_input("test", {
   cb = function(_, _)
     print("results")
   end,

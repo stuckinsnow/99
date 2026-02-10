@@ -7,15 +7,40 @@ local function a(p)
 end
 
 local custom_mds = {
-  { name = "back-end", path = a("scratch/custom_rules/back-end/SKILL.md") },
-  { name = "foo", path = a("scratch/custom_rules/foo/SKILL.md") },
-  { name = "front-end", path = a("scratch/custom_rules/front-end/SKILL.md") },
-  { name = "vim.lsp", path = a("scratch/custom_rules/vim.lsp/SKILL.md") },
-  { name = "vim", path = a("scratch/custom_rules/vim/SKILL.md") },
-  { name = "vim", path = a("scratch/custom_rules_2/vim/SKILL.md") },
+  {
+    name = "back-end",
+    path = "scratch/custom_rules/back-end/SKILL.md",
+    absolute_path = a("scratch/custom_rules/back-end/SKILL.md"),
+  },
+  {
+    name = "foo",
+    path = "scratch/custom_rules/foo/SKILL.md",
+    absolute_path = a("scratch/custom_rules/foo/SKILL.md"),
+  },
+  {
+    name = "front-end",
+    path = "scratch/custom_rules/front-end/SKILL.md",
+    absolute_path = a("scratch/custom_rules/front-end/SKILL.md"),
+  },
+  {
+    name = "vim.lsp",
+    path = "scratch/custom_rules/vim.lsp/SKILL.md",
+    absolute_path = a("scratch/custom_rules/vim.lsp/SKILL.md"),
+  },
+  {
+    name = "vim",
+    path = "scratch/custom_rules/vim/SKILL.md",
+    absolute_path = a("scratch/custom_rules/vim/SKILL.md"),
+  },
+  {
+    name = "vim",
+    path = "scratch/custom_rules_2/vim/SKILL.md",
+    absolute_path = a("scratch/custom_rules_2/vim/SKILL.md"),
+  },
   {
     name = "vim.treesitter",
-    path = a("scratch/custom_rules/vim.treesitter/SKILL.md"),
+    path = "scratch/custom_rules/vim.treesitter/SKILL.md",
+    absolute_path = a("scratch/custom_rules/vim.treesitter/SKILL.md"),
   },
 }
 
@@ -72,16 +97,47 @@ describe("rules: <name>/SKILL.md", function()
       end
     end
   end)
+
   it("find rules", function()
     local _99 = r({
       "scratch/custom_rules/",
       "scratch/custom_rules_2/",
     })
     local rules = Agents.rules(_99)
-    local prompt = "here is a test back-end @front-end and @vim.ls"
+    local prompt = "here is a test back-end #front-end and #vim.ls"
     local found = Agents.by_name(rules, prompt)
 
     eq({ "front-end" }, found.names)
     eq(rules.by_name["front-end"], found.rules)
+  end)
+
+  it("should validate that tokens exist by path and name", function()
+    local _99 = r({
+      "scratch/custom_rules/",
+      "scratch/custom_rules_2/",
+    })
+    local rules = Agents.rules(_99)
+
+    -- Test by path
+    eq(true, Agents.is_rule(rules, "scratch/custom_rules/back-end/SKILL.md"))
+    eq(true, Agents.is_rule(rules, "scratch/custom_rules/foo/SKILL.md"))
+    eq(true, Agents.is_rule(rules, "scratch/custom_rules/front-end/SKILL.md"))
+    eq(true, Agents.is_rule(rules, "scratch/custom_rules/vim.lsp/SKILL.md"))
+    eq(true, Agents.is_rule(rules, "scratch/custom_rules/vim/SKILL.md"))
+    eq(
+      true,
+      Agents.is_rule(rules, "scratch/custom_rules/vim.treesitter/SKILL.md")
+    )
+
+    -- Test by name
+    eq(true, Agents.is_rule(rules, "back-end"))
+    eq(true, Agents.is_rule(rules, "foo"))
+    eq(true, Agents.is_rule(rules, "front-end"))
+    eq(true, Agents.is_rule(rules, "vim"))
+
+    -- Test invalid
+    eq(false, Agents.is_rule(rules, "nonexistent"))
+    eq(false, Agents.is_rule(rules, "invalid-token"))
+    eq(false, Agents.is_rule(rules, ""))
   end)
 end)

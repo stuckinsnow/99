@@ -7,7 +7,7 @@ local NoiceStatus = require("99.ops.noice-status")
 local Diff = require("99.ops.diff")
 local geo = require("99.geo")
 local make_clean_up = require("99.ops.clean-up")
-local Agents = require("99.extensions.agents")
+local Completions = require("99.extensions.completions")
 
 local Range = geo.Range
 local Point = geo.Point
@@ -56,7 +56,7 @@ local function over_range(context, range, opts)
 
   local noice_status_ns = NoiceStatus.create(context.xid)
 
-  local clean_up = make_clean_up(context, function()
+  local clean_up = make_clean_up(context, "Visual", function()
     top_status:stop()
     bottom_status:stop()
     InlineMarks.clear(inline_marks_ns)
@@ -72,8 +72,8 @@ local function over_range(context, range, opts)
     full_prompt =
       context._99.prompts.prompts.prompt(additional_prompt, full_prompt)
 
-    local rules = Agents.find_rules(context._99.rules, additional_prompt)
-    context:add_agent_rules(rules)
+    local refs = Completions.parse(additional_prompt)
+    context:add_references(refs)
   end
 
   local additional_rules = opts.additional_rules

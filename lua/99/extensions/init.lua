@@ -1,3 +1,5 @@
+local Files = require("99.extensions.files")
+
 --- @class _99.Extensions.Source
 --- @field init_for_buffer fun(_99: _99.State): nil
 --- @field init fun(_99: _99.State): nil
@@ -50,6 +52,12 @@ return {
       return
     end
     source.init(_99)
+  end,
+
+  capture_project_root = function()
+    local cwd = vim.fn.getcwd()
+    local git_root = vim.fs.root(cwd, ".git")
+    Files.set_project_root(git_root or cwd)
   end,
 
   --- @param _99 _99.State

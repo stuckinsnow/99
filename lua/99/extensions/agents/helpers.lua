@@ -28,11 +28,17 @@ function M.ls(dir)
   end
   local rules = {}
 
+  local cwd = vim.uv.cwd()
   for _, file in ipairs(files) do
     local filename = vim.fn.fnamemodify(file, ":h:t")
+    local relative_path = file
+    if cwd and file:sub(1, #cwd) == cwd then
+      relative_path = file:sub(#cwd + 2) -- +2 to skip the trailing slash
+    end
     table.insert(rules, {
       name = filename,
-      path = file,
+      path = relative_path,
+      absolute_path = file,
     })
   end
 

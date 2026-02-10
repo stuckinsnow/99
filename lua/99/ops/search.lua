@@ -1,11 +1,60 @@
 local Request = require("99.request")
 local make_clean_up = require("99.ops.clean-up")
-local Agents = require("99.extensions.agents")
+local Completions = require("99.extensions.completions")
+local Mark = require("99.ops.marks")
+local Point = require("99.geo").Point
 
+--- @class _99.Search.Result
+--- @field filename string
+--- @field lnum number
+--- @field col number
+--- @field text string
+
+--- @return _99.Search.Result | nil
+local function parse_line(line)
+  local parts = vim.split(line, ":", { plain = true })
+  if #parts ~= 3 then
+    return nil
+  end
+
+  local filepath = parts[1]
+  local lnum = parts[2]
+  local comma_parts = vim.split(parts[3], ",", { plain = true })
+  local col = comma_parts[1]
+  local notes = nil
+
+  if #comma_parts >= 2 then
+    notes = table.concat(comma_parts, ",", 2)
+  end
+
+  return {
+    filename = filepath,
+    lnum = tonumber(lnum) or 1,
+    col = tonumber(col) or 1,
+    text = notes or "",
+  }
+end
+
+--- @param _99 _99.State
 --- @param response string
-local function create_search_locations(response)
+local function create_search_locations(_99, response)
+  _ = _99
   local lines = vim.split(response, "\n")
-  print(vim.inspect(lines))
+  local qf_list = {}
+
+  for _, line in ipairs(lines) do
+    local res = parse_line(line)
+    if res then
+      table.insert(qf_list, res)
+    end
+  end
+
+  if #qf_list > 0 then
+    vim.fn.setqflist(qf_list, "r")
+    vim.cmd("copen")
+  else
+    vim.notify("No search results found", vim.log.levels.INFO)
+  end
 end
 
 --- @param context _99.RequestContext
@@ -27,14 +76,14 @@ local function search(context, opts)
   --   "Implementing",
   --   top_mark
   -- )
-  local clean_up = make_clean_up(context, function()
+  local clean_up = make_clean_up(context, "Search", function()
     request:cancel()
   end)
 
   local full_prompt = context._99.prompts.prompts.semantic_search()
   full_prompt = context._99.prompts.prompts.prompt(user_prompt, full_prompt)
-  local rules = Agents.find_rules(context._99.rules, user_prompt)
-  context:add_agent_rules(rules)
+  local refs = Completions.parse(user_prompt)
+  context:add_references(refs)
 
   local additional_rules = opts.additional_rules
   if additional_rules then
@@ -54,7 +103,7 @@ local function search(context, opts)
           response or "no response provided"
         )
       elseif status == "success" then
-        create_search_locations(response)
+        create_search_locations(context._99, response)
       end
     end,
     on_stdout = function(line)
