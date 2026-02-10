@@ -11,21 +11,24 @@ It will happen that apis will disapear or be changed.  Sorry, this is an ALPHA p
 * debug (planned)
 
 ## The AI Agent That Neovim Deserves
-This is an example repo where i want to test what i think the ideal AI workflow
-is for people who dont have "skill issues."  This is meant to streamline the requests to AI and limit them it restricted areas.  For more general requests, please just use opencode.  Dont use neovim.
 
+This is an example repo where i want to test what i think the ideal AI workflow
+is for people who dont have "skill issues." This is meant to streamline the requests to AI and limit them it restricted areas. For more general requests, please just use opencode. Dont use neovim.
 
 ## Warning
+
 1. Prompts are temporary right now. they could be massively improved
 2. TS and Lua language support, open to more
 3. Still very alpha, could have severe problems
 
 ## How to use
+
 **you must have opencode installed and setup**
 
 Add the following configuration to your neovim config
 
 I make the assumption you are using Lazy
+
 ```lua
 	{
 		"ThePrimeagen/99",
@@ -69,8 +72,8 @@ I make the assumption you are using Lazy
                       "scratch/custom_rules/",
                     },
 
-                    --- What autocomplete do you use.  We currently only
-                    --- support cmp right now
+                    --- What autocomplete do you use.  Supports "cmp" (nvim-cmp) or "blink" (blink.cmp)
+                    --- For blink.cmp, you also need blink.compat plugin installed
                     source = "cmp",
                 },
 
@@ -108,22 +111,31 @@ I make the assumption you are using Lazy
 ```
 
 ## Completion
+
 When prompting, if you have cmp installed as your autocomplete you can use an autocomplete for rule inclusion in your prompt.
+
+Both nvim-cmp and blink.cmp are supported:
+
+- **nvim-cmp**: Set `source = "cmp"` in your config
+- **blink.cmp**: Set `source = "blink"` and ensure you have [blink.compat](https://github.com/saghen/blink.compat) installed
 
 How skill completion and inclusion works is that you start by typing `@`.
 
 ## API
+
 You can see the full api at [99 API](./lua/99/init.lua)
 
 ## Reporting a bug
-To report a bug, please provide the full running debug logs.  This may require
+
+To report a bug, please provide the full running debug logs. This may require
 a bit of back and forth.
 
-Please do not request features.  We will hold a public discussion on Twitch about
-features, which will be a much better jumping point then a bunch of requests that i have to close down.  If you do make a feature request ill just shut it down instantly.
+Please do not request features. We will hold a public discussion on Twitch about
+features, which will be a much better jumping point then a bunch of requests that i have to close down. If you do make a feature request ill just shut it down instantly.
 
 ### The logs
-To get the _last_ run's logs execute `:lua require("99").view_logs()`.  If this happens to not be the log, you can navigate the logs with:
+
+To get the _last_ run's logs execute `:lua require("99").view_logs()`. If this happens to not be the log, you can navigate the logs with:
 
 ```lua
 function _99.prev_request_logs() ... end
@@ -131,10 +143,13 @@ function _99.next_request_logs() ... end
 ```
 
 ### Dont forget
-If there are secrets or other information in the logs you want to be removed make sure that you delete the `query` printing.  This will likely contain information you may not want to share.
+
+If there are secrets or other information in the logs you want to be removed make sure that you delete the `query` printing. This will likely contain information you may not want to share.
 
 ### Known usability issues
-* long function definition issues.
+
+- long function definition issues.
+
 ```typescript
 function display_text(
   game_state: GameState,
@@ -151,14 +166,14 @@ function display_text(
 
 Then the virtual text will be displayed one line below "function" instead of first line in body
 
-* in lua and likely jsdoc, the replacing function will duplicate comment definitions
-  * this wont happen in languages with types in the syntax
+- in lua and likely jsdoc, the replacing function will duplicate comment definitions
+  - this wont happen in languages with types in the syntax
 
-* visual selection sends the whole file.  there is likely a better way to use
+- visual selection sends the whole file. there is likely a better way to use
   treesitter to make the selection of the content being sent more sensible.
 
 * every now and then the replacement seems to get jacked up and it screws up
 what i am currently editing..  I think it may have something to do with auto-complete
   * definitely not suure on this one
 
-* export function ... sometimes gets export as well.  I think the prompt could help prevent this
+- export function ... sometimes gets export as well. I think the prompt could help prevent this

@@ -467,4 +467,8 @@ function M.clear_active_popups()
   M.active_windows = {}
 end
 
+function M.status_window()
+  M.clear_active_popups()
+end
+
 return M

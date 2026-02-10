@@ -25,6 +25,9 @@ cnum = starting column number 1 based
 X = how many lines should be highlighted
 NOTES = A text description of why this highlight is important
 </Rule>
+<Rule>NOTES cannot have new lines</Rule>
+<Rule>You must adhere to the output format</Rule>
+<Rule>Double check output format before writing it to the file</Rule>
 <Rule>Each location is separated by new lines</Rule>
 <Rule>Each path is specified in absolute pathing</Rule>
 <Rule>You can provide notes you think are relevant per location</Rule>
