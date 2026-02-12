@@ -188,6 +188,10 @@ end
 
 --- Accept the change at cursor
 function M.accept()
+  if not current_opts.enabled then
+    return
+  end
+
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local row = cursor[1] - 1
@@ -202,6 +206,10 @@ end
 
 --- Reject the change at cursor
 function M.reject()
+  if not current_opts.enabled then
+    return
+  end
+
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local row = cursor[1] - 1
