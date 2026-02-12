@@ -76,6 +76,17 @@ local function over_range(context, range, opts)
     end_line = range.end_.row,
   }, context.xid)
 
+  -- Create diagonal lines for edit-paint regions too
+  local edit_paint_diag_ns = {}
+  local ep_regions = EditPaint.get_all_regions()
+  for i, region in ipairs(ep_regions) do
+    edit_paint_diag_ns[i] = DiagonalLines.create({
+      bufnr = region.bufnr,
+      start_line = region.start_line,
+      end_line = region.end_line,
+    }, context.xid .. "_ep_" .. i)
+  end
+
   local noice_status_ns = NoiceStatus.create(context.xid)
 
   local clean_up = make_clean_up(context, "Visual", function()
@@ -83,6 +94,9 @@ local function over_range(context, range, opts)
     bottom_status:stop()
     InlineMarks.clear(inline_marks_ns)
     DiagonalLines.clear(diagonal_lines_ns)
+    for _, ns in ipairs(edit_paint_diag_ns) do
+      DiagonalLines.clear(ns)
+    end
     NoiceStatus.clear(noice_status_ns)
     context:clear_marks()
     request:cancel()
@@ -248,6 +262,9 @@ local function over_range(context, range, opts)
       -- Also update diagonal lines if enabled
       if DiagonalLines.is_enabled() then
         DiagonalLines.update_status(diagonal_lines_ns, line)
+        for _, ns in ipairs(edit_paint_diag_ns) do
+          DiagonalLines.update_status(ns, line)
+        end
       end
       -- Also update noice status if enabled
       if NoiceStatus.is_enabled() then
