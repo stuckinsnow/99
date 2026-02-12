@@ -8,9 +8,31 @@ local Diff = require("99.ops.diff")
 local geo = require("99.geo")
 local make_clean_up = require("99.ops.clean-up")
 local Completions = require("99.extensions.completions")
+local EditPaint = require("99.ops.edit-paint")
 
 local Range = geo.Range
 local Point = geo.Point
+
+--- Parse multi-region response into numbered blocks
+--- @param response string
+--- @param region_count number total regions (0-indexed)
+--- @return table<number, string[]> map of region index to lines
+local function parse_multi_region_response(response, region_count)
+  local blocks = {}
+  for i = 0, region_count - 1 do
+    local start_delim = "--- REGION " .. i .. " ---"
+    local end_delim = "--- END REGION " .. i .. " ---"
+    local s = response:find(start_delim, 1, true)
+    local e = response:find(end_delim, 1, true)
+    if s and e then
+      local content = response:sub(s + #start_delim, e - 1)
+      -- strip leading/trailing newline from content
+      content = content:gsub("^\n", ""):gsub("\n$", "")
+      blocks[i] = vim.split(content, "\n")
+    end
+  end
+  return blocks
+end
 
 --- @param context _99.RequestContext
 --- @param range _99.Range
@@ -66,7 +88,16 @@ local function over_range(context, range, opts)
     request:cancel()
   end)
 
-  local full_prompt = context._99.prompts.prompts.visual_selection(range)
+  local edit_regions = EditPaint.get_all_regions()
+  local is_multi_region = #edit_regions > 0
+
+  local full_prompt
+  if is_multi_region then
+    full_prompt = context._99.prompts.prompts.multi_region_visual_selection(range, edit_regions)
+  else
+    full_prompt = context._99.prompts.prompts.visual_selection(range)
+  end
+
   local additional_prompt = opts.additional_prompt
   if additional_prompt then
     full_prompt =
@@ -135,26 +166,74 @@ local function over_range(context, range, opts)
           return
         end
 
-        local new_range = Range.from_marks(top_mark, bottom_mark)
-        local lines = vim.split(response, "\n")
+        if is_multi_region then
+          local total_regions = 1 + #edit_regions
+          local blocks = parse_multi_region_response(response, total_regions)
+          logger:debug("parsed multi-region response", "blocks_found", vim.tbl_count(blocks), "expected", total_regions)
 
-        --- HACK: i am adding a new line here because above range will add a mark to the line above.
-        --- that way this appears to be added to "the same line" as the visual selection was
-        --- originally take from
-        table.insert(lines, 1, "")
-
-        -- If diff is enabled, store as pending change for review
-        if Diff.is_enabled() then
-          local s_row, _ = new_range.start:to_vim()
-          local e_row, _ = new_range.end_:to_vim()
-          local stored = Diff.store_pending(range.buffer, s_row, e_row + 1, lines)
-          if stored then
-            logger:debug("stored pending change for diff review")
-            return
+          -- Apply edit-paint regions in REVERSE order (highest line numbers first)
+          -- to avoid line offset issues within the same buffer
+          for i = #edit_regions, 1, -1 do
+            local block = blocks[i]
+            if block then
+              local region = edit_regions[i]
+              local end_col = #region.lines[#region.lines]
+              local r = Range:new(
+                region.bufnr,
+                Point:from_1_based(region.start_line, 1),
+                Point.from_0_based(region.end_line - 1, end_col)
+              )
+              if Diff.is_enabled() then
+                local s_row, _ = r.start:to_vim()
+                local e_row, _ = r.end_:to_vim()
+                Diff.store_pending(region.bufnr, s_row, e_row + 1, block)
+              else
+                r:replace_text(block)
+              end
+            else
+              logger:error("missing block for edit-paint region", "index", i)
+            end
           end
-        end
 
-        new_range:replace_text(lines)
+          -- Apply region 0 (the visual selection)
+          local block_0 = blocks[0]
+          if block_0 then
+            local new_range = Range.from_marks(top_mark, bottom_mark)
+            table.insert(block_0, 1, "")
+            if Diff.is_enabled() then
+              local s_row, _ = new_range.start:to_vim()
+              local e_row, _ = new_range.end_:to_vim()
+              Diff.store_pending(range.buffer, s_row, e_row + 1, block_0)
+            else
+              new_range:replace_text(block_0)
+            end
+          else
+            logger:error("missing block for visual selection region 0")
+          end
+
+          EditPaint.clear()
+        else
+          local new_range = Range.from_marks(top_mark, bottom_mark)
+          local lines = vim.split(response, "\n")
+
+          --- HACK: i am adding a new line here because above range will add a mark to the line above.
+          --- that way this appears to be added to "the same line" as the visual selection was
+          --- originally take from
+          table.insert(lines, 1, "")
+
+          -- If diff is enabled, store as pending change for review
+          if Diff.is_enabled() then
+            local s_row, _ = new_range.start:to_vim()
+            local e_row, _ = new_range.end_:to_vim()
+            local stored = Diff.store_pending(range.buffer, s_row, e_row + 1, lines)
+            if stored then
+              logger:debug("stored pending change for diff review")
+              return
+            end
+          end
+
+          new_range:replace_text(lines)
+        end
       end
     end,
     on_stdout = function(line)

@@ -17,6 +17,7 @@ local InlineMarks = require("99.ops.inline-marks")
 local DiagonalLines = require("99.ops.diagonal-lines")
 local NoiceStatus = require("99.ops.noice-status")
 local Diff = require("99.ops.diff")
+local EditPaint = require("99.ops.edit-paint")
 local Paint = require("99.ops.paint")
 
 --- @return string
@@ -505,6 +506,18 @@ end
 --- Clear the last painted region
 function _99.clear_last_paint()
   Paint.clear_last()
+end
+
+--- Edit-paint: mark a visual selection as an editable target for multi-region edits
+function _99.edit_paint()
+  set_selection_marks()
+  local range = Range.from_visual_selection()
+  EditPaint.add_region(range)
+end
+
+--- Clear all edit-painted regions
+function _99.clear_edit_paint()
+  EditPaint.clear()
 end
 
 --- View all the logs that are currently cached.  Cached log count is determined

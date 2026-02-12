@@ -98,6 +98,41 @@ consider the context of the selection and what you are suppose to be implementin
       get_file_contents(range.buffer)
     )
   end,
+  --- @param range _99.Range
+  --- @param edit_regions _99.EditPaint.Region[]
+  --- @return string
+  multi_region_visual_selection = function(range, edit_regions)
+    local parts = {}
+    table.insert(parts, [[
+You receive MULTIPLE code regions that you must edit. Each region is numbered.
+You MUST return replacement code for EVERY region using this EXACT format:
+
+--- REGION 0 ---
+<replacement code for region 0>
+--- END REGION 0 ---
+--- REGION 1 ---
+<replacement code for region 1>
+--- END REGION 1 ---
+
+...and so on for each region. Do NOT include any commentary outside the region delimiters.
+Do NOT skip any region. Every region must have a replacement block.
+]])
+
+    table.insert(parts, string.format("\n<REGION_0_LOCATION>\n%s\n</REGION_0_LOCATION>", range:to_string()))
+    table.insert(parts, string.format("<REGION_0_CONTENT>\n%s\n</REGION_0_CONTENT>", range:to_text()))
+    table.insert(parts, string.format("<REGION_0_FILE>\n%s\n</REGION_0_FILE>", get_file_contents(range.buffer)))
+
+    for i, region in ipairs(edit_regions) do
+      local bufname = vim.api.nvim_buf_get_name(region.bufnr)
+      local content = table.concat(region.lines, "\n")
+      local file_contents = get_file_contents(region.bufnr)
+      table.insert(parts, string.format("\n<REGION_%d_LOCATION>\nFile: %s, Lines %d-%d\n</REGION_%d_LOCATION>", i, bufname, region.start_line, region.end_line, i))
+      table.insert(parts, string.format("<REGION_%d_CONTENT>\n%s\n</REGION_%d_CONTENT>", i, content, i))
+      table.insert(parts, string.format("<REGION_%d_FILE>\n%s\n</REGION_%d_FILE>", i, file_contents, i))
+    end
+
+    return table.concat(parts, "\n")
+  end,
   -- luacheck: ignore 631
   read_tmp = function()
     return [[
